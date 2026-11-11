@@ -16,7 +16,6 @@ import io.hammerhead.karooext.models.UpdateGraphicConfig
 import io.hammerhead.karooext.models.ViewConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
@@ -62,11 +61,16 @@ class TinyClimbDataType(
             var lastRender = 0L
             var shown: Any? = null
             var wasOnScreen = true
+            // Sleep until the climb or the page on screen changes (karoo-common FieldPacer), no polling
+            val pace = FieldPacer(listOf(session.state, session.activePage))
+            val pagePace = FieldPacer(listOf(session.activePage))
             while (isActive) {
+                pace.mark()
+                pagePace.mark()
                 // Only while this field's page is on screen; back on screen: draw at once
                 val onScreen = onScreen(config)
                 if (onScreen != wasOnScreen) { wasOnScreen = onScreen; if (onScreen) shown = null }
-                if (!onScreen) { delay(POLL_MS); continue }
+                if (!onScreen) { pagePace.sleep(FieldPacer.CAP_MS); continue }
                 val s = session.state.value
                 val prefs = Settings.read(context)
                 val night = isNight(context)
@@ -84,7 +88,7 @@ class TinyClimbDataType(
                     }
                     lastRender = SystemClock.elapsedRealtime()
                 }
-                delay(POLL_MS)
+                pace.sleep(FieldPacer.nextMs(key != shown, SystemClock.elapsedRealtime() - lastRender, MIN_GAP_MS, IDLE_REDRAW_MS))
             }
         }
         emitter.setCancellable { job.cancel() }
@@ -109,7 +113,6 @@ class TinyClimbDataType(
         const val NAV_ROW_FACTOR = 0.87
         private const val MIN_GAP_MS = 920L
         private const val IDLE_REDRAW_MS = 5_000L
-        private const val POLL_MS = 100L
     }
 }
 

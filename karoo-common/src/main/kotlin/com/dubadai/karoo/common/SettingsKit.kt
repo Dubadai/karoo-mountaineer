@@ -537,3 +537,44 @@ fun <T> Context.settingsRankList(
     }
     build()
 }
+
+/**
+ * One choice from a list too long for [settingsSegmented] (kit 1.4.0, UpAhead's "At the top"): a row per
+ * option, the picked one on a grey card with a filled ring at the right, the others with an empty ring.
+ * The whole row is the tap target.
+ */
+fun <T> Context.settingsChoiceList(options: List<Pair<String, T>>, selected: T, onPick: (T) -> Unit): LinearLayout = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    options.forEach { (name, value) ->
+        val picked = value == selected
+        addView(
+            LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                if (picked) setBackgroundResource(R.drawable.bg_settings_card)
+                setPadding(px(14), 0, px(10), 0)
+                minimumHeight = px(44)
+                isClickable = true
+                setOnClickListener { if (!picked) onPick(value) }
+                addView(label(name, 16f, R.color.settings_title, if (picked) 500 else 400), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(ChoiceRing(context, picked), LinearLayout.LayoutParams(px(22), px(22)))
+            },
+            LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = px(4) },
+        )
+    }
+}
+
+/** The ring of a [settingsChoiceList] row: filled in the kit's selected colour when picked. */
+private class ChoiceRing(context: Context, private val picked: Boolean) : View(context) {
+    private val ring = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 2f * context.resources.displayMetrics.density
+        color = context.getColor(if (picked) R.color.segment_selected else R.color.settings_switch_thumb_off)
+    }
+    private val dot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = context.getColor(R.color.segment_selected) }
+    override fun onDraw(c: android.graphics.Canvas) {
+        val r = minOf(width, height) / 2f
+        c.drawCircle(width / 2f, height / 2f, r - ring.strokeWidth, ring)
+        if (picked) c.drawCircle(width / 2f, height / 2f, r * 0.45f, dot)
+    }
+}
