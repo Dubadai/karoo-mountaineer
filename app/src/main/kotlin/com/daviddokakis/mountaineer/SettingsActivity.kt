@@ -81,11 +81,11 @@ class SettingsActivity : Activity() {
             prefs.twoTiles) { exampleSize = Size.TWO; Settings.put(this, "two_tiles", it) }
 
         form.addView(settingsHeading(R.drawable.ic_settings_top_row, getString(R.string.setting_half)))
+        form.addView(settingsIntro(getString(R.string.setting_half_help)))
         halfSwitch(R.drawable.ic_settings_climber, R.string.half_name, prefs.halfName, "half_name")
         halfSwitch(R.drawable.ic_settings_pr, R.string.half_pr, prefs.halfPr, "half_pr")
         halfSwitch(R.drawable.ic_settings_timer, R.string.half_gap, prefs.halfGap, "half_gap")
         halfSwitch(R.drawable.ic_settings_clock, R.string.half_eta, prefs.halfEta, "half_eta")
-        form.addView(settingsHelp(getString(R.string.setting_half_help)))
         form.addView(settingsDivider())
 
         // Data
@@ -100,8 +100,8 @@ class SettingsActivity : Activity() {
 
     private fun <T> section(icon: Int, title: Int, helpText: Int, options: List<Pair<Int, T>>, selected: T, onPick: (T) -> Unit) {
         form.addView(settingsHeading(icon, getString(title)))
+        form.addView(settingsIntro(getString(helpText)))
         form.addView(settingsSegmented(options.map { (label, v) -> getString(label) to v }, selected) { onPick(it); render() })
-        form.addView(settingsHelp(getString(helpText)))
         form.addView(settingsDivider())
     }
 
@@ -114,23 +114,22 @@ class SettingsActivity : Activity() {
     private fun timeToTop(prefs: Prefs) {
         form.addView(settingsHeading(R.drawable.ic_settings_speed, getString(R.string.setting_time)))
         form.addView(settingsSubLabel(getString(R.string.setting_bike)))
+        form.addView(settingsIntro(getString(R.string.bike_help)))
         form.addView(settingsSegmented(listOf(getString(R.string.bike_one) to false, getString(R.string.bike_profiles) to true), prefs.bikePerProfile) {
             Settings.put(this, "bike_per_profile", it); render()
         })
         val base = prefs.bikeKg ?: Physics.BIKE_KG
         if (!prefs.bikePerProfile) {
             weightRow(getString(R.string.bike_all), prefs.bikeKg, Physics.BIKE_KG) { Settings.setBikeKg(this, it) }
-            form.addView(settingsHelp(getString(R.string.bike_one_help)))
         } else if (prefs.profiles.isEmpty()) {
             form.addView(settingsHelp(getString(R.string.bike_profiles_none)))
         } else {
             prefs.profiles.forEach { pr -> weightRow(pr.name, pr.kg, base) { Settings.setProfileKg(this, pr.id, it) } }
-            form.addView(settingsHelp(getString(R.string.bike_profiles_help)))
         }
         form.addView(settingsSwitchRow(R.drawable.ic_settings_wind, getString(R.string.setting_wind), prefs.wind) { Settings.put(this, "wind", it); render() })
-        form.addView(settingsHelp(getString(R.string.setting_wind_help)))
+        form.addView(settingsIntro(getString(R.string.setting_wind_help)))
         form.addView(settingsSwitchRow(R.drawable.ic_settings_target, getString(R.string.setting_improve), prefs.improve) { Settings.put(this, "improve", it); render() })
-        form.addView(settingsHelp(getString(R.string.setting_improve_help)).apply { setPadding(0, dp(10), 0, 0) })
+        form.addView(settingsIntro(getString(R.string.setting_improve_help)))
         form.addView(settingsInfoRow(R.drawable.ic_settings_lock, getString(R.string.privacy)))
         form.addView(settingsDivider())
     }

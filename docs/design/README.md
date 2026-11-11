@@ -18,3 +18,4 @@
 | `gradient-blocks/` | Round 57: gradient blocks grow with the zoom (min 8 px), no stripes | Built (blue-tiles) |
 | `after-top/` | Round 58: a bit of the road after the summit, in the road blue, fading out | Built (blue-tiles) |
 | `empty-states/` | Rounds 59–60: a loaded route always shows the map (DIST TO FINISH); No Route the only empty screen; no OFF ROUTE words | Built (blue-tiles) |
+| `settings-intro/` | Settings: what a setting does under its heading, before its choices (kit 1.8.0 `settingsIntro`) | Approved, built (settings-intro) |
