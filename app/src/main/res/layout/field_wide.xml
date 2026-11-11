@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two tiles (round 48): the climb graph on the left stretches to whatever height the Karoo gives
+     (it can shorten a row without telling us) under the climb's name at true size (round 51); the text column on the right goes through
+     karoo-common's KarooField (header at true size, the time and its line kept in proportion).
+     Weights = the renderer's split (240 of 478). The climb navy behind both halves (round 51), no click handler (see field_main). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/field_navy_bg"
+    android:orientation="horizontal">
+
+    <FrameLayout
+        android:id="@+id/graph"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="240" />
+
+    <FrameLayout
+        android:id="@+id/text"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="238" />
+</LinearLayout>

@@ -1,0 +1,1745 @@
+<meta charset="utf-8">
+<title>Mountaineer Mockup</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  @font-face { font-family: PlexReg; src: url(__PLEX_REGULAR__); }
+  @font-face { font-family: PlexMed; src: url(__PLEX_MEDIUM__); }
+  @font-face { font-family: PlexSemi; src: url(__PLEX_SEMIBOLD__); }
+  @font-face { font-family: PlexCond; src: url(__PLEX_COND__); }
+  /*__RELATIVE_FACE__*/
+  :root { --bg: #2A2A2A; --ink: #EDEDED; --muted: #9A9A9A; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 PlexMed, system-ui, sans-serif; }
+  main { max-width: 820px; margin: 0 auto; padding-block: 24px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h2 { font: 20px PlexSemi, sans-serif; margin: 40px 0 4px; }
+  h2:first-child { margin-top: 0; }
+  p.note { color: var(--muted); margin: 0 0 14px; max-width: 640px; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .row canvas { max-width: 100%; height: auto !important; }
+</style>
+<main id="out"></main>
+<script>
+/*__KAROO_DEVICE_JS__*/
+</script>
+<script>
+const ICONS = "__ICONS__";
+let HAS_RELATIVE = false;   // set when the preview build carries the Karoo's Relative font
+const img = s => new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.src = s; });
+
+// Showcase numbers (design-assets/tools/field-gallery/showcase.json) for the other fields
+const F = {
+  power: { label: '3S POWER', value: '280', icon: 'bolt' },
+  hr:    { label: 'HR', value: '132', icon: 'heart' },
+  speed: { label: 'SPEED', value: '28.4', icon: 'speed' },
+  lap:   { label: 'LAP TIME', value: '4:21', icon: 'lap-timer' },
+  lapspd:{ label: 'LAP AVG SPEED', value: '29.1', icon: 'lap-speed' },
+};
+
+// Demo climb: 6.4 km, 16 pieces of 400 m, grade per piece (%). Rider at 3.8 km.
+const CLIMB = {
+  name: 'Col du Lac', lengthKm: 6.4, avg: 7.5, gainM: 482,
+  grades: [4, 6, 7, 8, 9, 7, 6, 10, 12, 9, 8, 7, 11, 8, 6, 5],
+  at: 3.8 / 6.4,
+  toTop: '9:42', leftKm: '2.6', leftM: 196,
+  pr: '24:12', behind: '+0:18', ahead: '−0:24', grade: 9,
+  nextIn: '3.2',
+};
+// Grade colours: the Karoo's own climb table (ride app climb1..7, same in light and dark).
+const CLIMB_COL = ['#60EEB2', '#00B988', '#FFF500', '#FB8C65', '#FE581F', '#D60404', '#B700A2'];
+const gradeCol = g => CLIMB_COL[g < 3 ? 0 : g < 5 ? 1 : g < 7 ? 2 : g < 9 ? 3 : g < 11 ? 4 : g < 13 ? 5 : 6];
+const gapCol = (dark, behind) => behind ? (dark ? '#FF5A4E' : '#C40404') : (dark ? '#60EEB2' : '#007A5A');
+
+// Round 25: the Karoo's own names (Strava Live Segments: "PR", "Time to PR"; navigation's
+// "Time to Destination" → TIME TO TOP). Applied to the labels when NAMES is 'karoo'.
+let NAMES = 'karoo';   // round 25: we picked the Karoo's names
+const KAROO_NAMES = { 'STRAVA PR': 'PR', 'VS PR': 'TIME TO PR', 'ETA TO TOP': 'TIME TO TOP', 'PR': 'PR' };
+function text(ctx, s, font, size, color, x, baseline, maxW = 1e9, scaleX = 1, align = 'right') {
+  if (NAMES === 'karoo' && KAROO_NAMES[s]) s = KAROO_NAMES[s];
+  // Round 13: numbers like the Karoo's own fields (and BetterIntervals, matched on the device):
+  // Plex Regular at 90 % width, letters 0.05 em tighter. 82 % thinned the strokes.
+  const karooNum = scaleX === 0.82;
+  if (karooNum && HAS_RELATIVE) { font = 'Relative'; scaleX = 1; }   // round 20: the Karoo's value font (preview only)
+  else if (karooNum) scaleX = 0.9;
+  ctx.letterSpacing = karooNum ? `${(HAS_RELATIVE ? -0.04 : -0.05) * size}px` : '0px';
+  ctx.font = `${size}px ${font}`;
+  let w = ctx.measureText(s).width * scaleX;
+  if (w > maxW) { size *= maxW / w; ctx.font = `${size}px ${font}`; w = maxW; }
+  ctx.save(); ctx.translate(x, baseline); ctx.scale(scaleX, 1);
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(s, 0, 0); ctx.restore();
+  ctx.letterSpacing = '0px';
+  return w;
+}
+function iconAt(ctx, name, dark, x, y, k = 1) {
+  const i = ICONS_IMG[`${name}-${dark ? 'dark' : 'light'}`];
+  if (i) ctx.drawImage(i, x, y, i.width * k, i.height * k);
+}
+// Small mountain icon (our own, Karoo icon size: 25 px box, ends on the label baseline)
+function mountain(ctx, x, baseline, color, s = 25) {
+  const k = s / 25, y = baseline - 20 * k;
+  ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(0, 20); ctx.lineTo(9, 3); ctx.lineTo(13.5, 11); ctx.lineTo(17, 6); ctx.lineTo(25, 20); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// Strava symbol next to the mountain wherever a PR is shown. Three candidates:
+//   chevron: Strava's double chevron in Strava orange (their mark: check brand rules before release)
+//   medal:   a PR medal, like the one Strava gives for a personal record
+//   badge:   an orange "PR" pill
+// Draws in a 22 px box ending on [baseline]; returns its width.
+const STRAVA = '#FC4C02';
+let PR_ICON = 'karoo';   // round 25: the Karoo's PR rosette (was medal / badge)   // Settings › PR symbol: PR medal (default) / PR badge
+function stravaIcon(ctx, x, baseline, dark, kind = PR_ICON, s = 22) {
+  if (kind === 'karoo') {   // round 25: the Karoo's own PR rosette (ink 13..34 × 8..39 in its 41 viewport, after translate -3)
+    const k = s / 31; ctx.save(); ctx.translate(x - 10 * k, baseline - 36 * k); ctx.scale(k, k);
+    ctx.fillStyle = typeof dark === 'string' ? dark : (dark ? '#FFF' : '#000'); ctx.fill(P_PR); ctx.restore(); return 21 * k;
+  }
+  const k = s / 22, y = baseline - 21 * k;
+  ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
+  if (kind === 'chevron') {
+    ctx.translate(0, -3); ctx.scale(1.15, 1.15);
+    ctx.fillStyle = STRAVA;
+    ctx.beginPath(); ctx.moveTo(0, 14); ctx.lineTo(7, 0); ctx.lineTo(14, 14); ctx.lineTo(9.6, 14); ctx.lineTo(7, 9); ctx.lineTo(4.4, 14); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 0.65;
+    ctx.beginPath(); ctx.moveTo(10.5, 14); ctx.lineTo(13.5, 14); ctx.lineTo(15.5, 18); ctx.lineTo(17.5, 14); ctx.lineTo(20.5, 14); ctx.lineTo(15.5, 22); ctx.closePath(); ctx.fill();
+    ctx.restore(); return 24 * k;
+  }
+  if (kind === 'medal') {
+    ctx.fillStyle = STRAVA;
+    ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(8, 0); ctx.lineTo(11, 7); ctx.lineTo(8, 10); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(19, 0); ctx.lineTo(14, 0); ctx.lineTo(11, 7); ctx.lineTo(14, 10); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#F2B01E'; ctx.beginPath(); ctx.arc(11, 15, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#B07A00'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(11, 15, 4.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore(); return 22 * k;
+  }
+  // badge
+  ctx.fillStyle = STRAVA; ctx.beginPath(); ctx.roundRect(0, 3, 30, 19, 5); ctx.fill();
+  ctx.font = '15px PlexSemi'; ctx.fillStyle = '#FFF'; ctx.textAlign = 'center'; ctx.fillText('PR', 15, 18);
+  ctx.restore(); return 30 * k;
+}
+
+// A Karoo stock field (same metrics as compose.swift)
+function stock(ctx, r, f, dark) {
+  const ink = dark ? '#FFF' : '#000';
+  const ls = r.h < 150 ? 28 : 31.875;
+  text(ctx, f.label, 'PlexCond', ls, ink, r.x + r.w - 8, r.y + 8 + ls * 0.82, r.w - 90);
+  iconAt(ctx, f.icon, dark, r.x + 6, r.y + 6 + ls * 0.82 - 40 * 0.62);
+  text(ctx, f.value, 'PlexReg', Math.min(r.h * 0.58, 116), ink, r.x + r.w - 8, r.y + r.h - r.h * 0.08, r.w - 16, 0.82);
+}
+// Header like the Karoo's own: mountain left, capitals right
+function header(ctx, r, label, dark, ink, strava = false) {
+  const ls = 31.875, base = r.y + 8 + ls * 0.82;
+  mountain(ctx, r.x + 12, base, ink);
+  const left = strava ? 44 + stravaIcon(ctx, r.x + 44, base, dark) + 8 : 46;
+  text(ctx, label, 'PlexCond', ls, ink, r.x + r.w - 8, base, r.w - left - 8);
+  return base;
+}
+const LABEL = { top: 'ETA TO TOP', dist: 'DIST TO TOP', pr: 'VS PR' };
+
+// The climb profile: one filled piece per 400 m in its grade colour, ridden part grey,
+// the rider as a ▼ + line like BetterIntervals' "now" marker.
+function profile(ctx, b, dark, o = {}) {
+  const ink = dark ? '#FFF' : '#000';
+  const g = CLIMB.grades, n = g.length;
+  const e = [0]; g.forEach((v, i) => e.push(e[i] + v));
+  const eMax = e[n];
+  const X = i => b.x + (i / n) * b.w, Y = i => b.y + b.h - (0.14 + 0.86 * e[i] / eMax) * b.h;
+  const bottom = b.y + b.h;
+  const piece = (i, fill) => {
+    ctx.beginPath(); ctx.moveTo(X(i), bottom); ctx.lineTo(X(i), Y(i)); ctx.lineTo(X(i + 1), Y(i + 1)); ctx.lineTo(X(i + 1), bottom); ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill();
+  };
+  const ridden = dark ? '#4A4A4A' : '#CFCFCF';
+  for (let i = 0; i < n; i++) piece(i, o.idle ? ridden : gradeCol(g[i]));
+  const px = b.x + CLIMB.at * b.w;
+  if (!o.idle && o.ridden !== 'colour') {           // ridden part grey
+    ctx.save(); ctx.beginPath(); ctx.rect(b.x, b.y - 4, px - b.x, b.h + 8); ctx.clip();
+    for (let i = 0; i < n; i++) piece(i, ridden);
+    ctx.restore();
+  }
+  // thin top edge so yellow reads on white
+  ctx.beginPath(); ctx.moveTo(X(0), Y(0)); for (let i = 1; i <= n; i++) ctx.lineTo(X(i), Y(i));
+  ctx.strokeStyle = ink; ctx.lineWidth = o.big ? 2 : 1.5; ctx.lineJoin = 'round'; ctx.stroke();
+  if (o.idle) return;
+  // marker
+  const t = o.big ? 7 : 5.5, top = o.markerTop ?? b.y;
+  ctx.strokeStyle = ink; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(px, top + 2); ctx.lineTo(px, bottom); ctx.stroke();
+  ctx.fillStyle = ink; ctx.beginPath(); ctx.moveTo(px - t, top - t * 1.2); ctx.lineTo(px + t, top - t * 1.2); ctx.lineTo(px, top + 2); ctx.closePath(); ctx.fill();
+}
+
+// ---- The field at its three sizes -------------------------------------------------
+
+// Small (one tile, 238×168): mountain + label, the number, the tiny profile under it.
+function small(ctx, r, dark, o = {}) {
+  const ink = dark ? '#FFF' : '#000';
+  const show = o.show || 'top';
+  if (o.idle) {
+    header(ctx, r, 'NEXT CLIMB', dark, ink);
+    text(ctx, CLIMB.nextIn, 'PlexReg', 58, ink, r.x + r.w - 8 - 30, r.y + 94, r.w, 0.82);
+    text(ctx, 'km', 'PlexCond', 24, ink, r.x + r.w - 8, r.y + 94);
+    profile(ctx, { x: r.x + 12, y: r.y + 108, w: r.w - 24, h: 52 }, dark, { idle: true });
+    return;
+  }
+  header(ctx, r, LABEL[show], dark, ink, show === 'pr');
+  if (show === 'dist') {
+    text(ctx, CLIMB.leftKm, 'PlexReg', 58, ink, r.x + r.w - 8 - 30, r.y + 94, r.w, 0.82);
+    text(ctx, 'km', 'PlexCond', 24, ink, r.x + r.w - 8, r.y + 94);
+  } else {
+    const val = show === 'top' ? CLIMB.toTop : (o.ahead ? CLIMB.ahead : CLIMB.behind);
+    const col = show === 'top' ? ink : gapCol(dark, !o.ahead);
+    text(ctx, val, 'PlexReg', 58, col, r.x + r.w - 8, r.y + 94, r.w - 16, 0.82);
+  }
+  profile(ctx, { x: r.x + 12, y: r.y + 108, w: r.w - 24, h: 52 }, dark, o);
+}
+
+// Wide (two tiles, 478×168): climb name in the header, profile left, number right.
+function wide(ctx, r, dark, o = {}) {
+  const ink = dark ? '#FFF' : '#000', muted = dark ? '#A8A8A8' : '#5E5E5E';
+  const show = o.show || 'top';
+  const ls = 31.875, base = r.y + 8 + ls * 0.82;
+  mountain(ctx, r.x + 12, base, ink);
+  if (o.idle) {
+    text(ctx, 'NEXT CLIMB', 'PlexCond', ls, ink, r.x + r.w - 8, base);
+    text(ctx, CLIMB.name, 'PlexMed', 26, ink, r.x + 46, base, 200, 1, 'left');
+    profile(ctx, { x: r.x + 12, y: r.y + 66, w: 250, h: 90 }, dark, { idle: true });
+    text(ctx, CLIMB.nextIn, 'PlexReg', 72, ink, r.x + r.w - 8 - 34, r.y + 128, 160, 0.82);
+    text(ctx, 'km', 'PlexCond', 26, ink, r.x + r.w - 8, r.y + 128);
+    text(ctx, `${CLIMB.lengthKm} km · ${CLIMB.avg}%`, 'PlexMed', 21, muted, r.x + r.w - 8, r.y + 156);
+    return;
+  }
+  const pr = show === 'pr' || show === 'both';
+  text(ctx, LABEL[show === 'both' ? 'top' : show], 'PlexCond', ls, ink, r.x + r.w - 8, base);
+  const nameX = pr ? 44 + stravaIcon(ctx, r.x + 44, base, dark) + 8 : 46;
+  text(ctx, CLIMB.name, 'PlexMed', 26, ink, r.x + nameX, base, 200, 1, 'left');
+  profile(ctx, { x: r.x + 12, y: r.y + 70, w: 262, h: 88 }, dark, o);
+  if (show === 'dist') {
+    text(ctx, CLIMB.leftKm, 'PlexReg', 76, ink, r.x + r.w - 8 - 36, r.y + 124, 150, 0.82);
+    text(ctx, 'km', 'PlexCond', 28, ink, r.x + r.w - 8, r.y + 124);
+    text(ctx, `${CLIMB.leftM} m to climb`, 'PlexMed', 21, muted, r.x + r.w - 8, r.y + 157);
+    return;
+  }
+  const big = show === 'pr' ? (o.ahead ? CLIMB.ahead : CLIMB.behind) : CLIMB.toTop;
+  const bigCol = show === 'pr' ? gapCol(dark, !o.ahead) : ink;
+  text(ctx, big, 'PlexReg', 76, bigCol, r.x + r.w - 8, r.y + 124, 180, 0.82);
+  if (show === 'both') {
+    const w = text(ctx, 'VS PR', 'PlexCond', 24, muted, r.x + r.w - 8, r.y + 157);
+    text(ctx, o.ahead ? CLIMB.ahead : CLIMB.behind, 'PlexMed', 26, gapCol(dark, !o.ahead), r.x + r.w - 8 - w - 8, r.y + 157);
+  } else {
+    text(ctx, `${CLIMB.leftKm} km · ${CLIMB.leftM} m`, 'PlexMed', 21, muted, r.x + r.w - 8, r.y + 157);
+  }
+}
+
+// Half screen (478×348): name, then Strava PR | vs PR | To top, then a big profile.
+function halfScreen(ctx, r, dark, o = {}) {
+  const ink = dark ? '#FFF' : '#000', muted = dark ? '#A8A8A8' : '#5E5E5E';
+  const sh = Object.assign({ name: true, pr: true, gap: true, top: true }, o.items || {});
+  let y = r.y;
+  if (sh.name) {
+    mountain(ctx, r.x + 12, r.y + 40, ink, 28);
+    const nameX = (sh.pr || sh.gap) ? 48 + stravaIcon(ctx, r.x + 48, r.y + 40, dark, PR_ICON, 25) + 9 : 50;
+    text(ctx, o.idle ? `Next: ${CLIMB.name}` : CLIMB.name, 'PlexSemi', 30, ink, r.x + nameX, r.y + 40, 250, 1, 'left');
+    text(ctx, `${CLIMB.lengthKm} km · ${CLIMB.avg}%`, 'PlexMed', 21, muted, r.x + r.w - 10, r.y + 38);
+    y += 52;
+  }
+  const cols = [];
+  if (o.idle) cols.push({ l: 'IN', v: CLIMB.nextIn + ' km', c: ink }, { l: 'STRAVA PR', v: CLIMB.pr, c: ink }, { l: 'CLIMB', v: CLIMB.gainM + ' m', c: ink });
+  else {
+    if (sh.pr) cols.push({ l: 'STRAVA PR', v: CLIMB.pr, c: ink });
+    if (sh.gap) cols.push({ l: 'VS PR', v: o.ahead ? CLIMB.ahead : CLIMB.behind, c: gapCol(dark, !o.ahead) });
+    if (sh.top) cols.push({ l: 'ETA TO TOP', v: CLIMB.toTop, c: ink });
+  }
+  if (cols.length) {
+    const cw = (r.w - 8) / cols.length;
+    cols.forEach((c, i) => {
+      const right = r.x + 4 + cw * (i + 1) - 10;
+      text(ctx, c.l, 'PlexCond', 24, ink, right, y + 26);
+      text(ctx, c.v, 'PlexReg', cols.length === 3 ? 54 : 64, c.c, right, y + 82, cw - 16, 0.82);
+      if (i) { ctx.fillStyle = dark ? '#3A3A3A' : '#E2E2E2'; ctx.fillRect(r.x + 4 + cw * i, y + 8, 1, 76); }
+    });
+    y += 96;
+  }
+  const b = { x: r.x + 14, y: y + 30, w: r.w - 28, h: r.y + r.h - 34 - (y + 30) };
+  profile(ctx, b, dark, { ...o, big: true, markerTop: y + 26 });
+  // under the profile: km ridden at the marker, km left at the end
+  if (!o.idle) {
+    const px = b.x + CLIMB.at * b.w;
+    text(ctx, `${CLIMB.grade}%`, 'PlexSemi', 22, ink, px + 12, y + 22, 1e9, 1, 'left');
+    text(ctx, `${CLIMB.leftKm} km to top`, 'PlexMed', 20, muted, r.x + r.w - 14, r.y + r.h - 9);
+    text(ctx, `3.8 of ${CLIMB.lengthKm} km`, 'PlexMed', 20, muted, r.x + 14, r.y + r.h - 9, 1e9, 1, 'left');
+  }
+}
+
+// ---- Half screen, round 4 options ---------------------------------------------------
+// One type scale for all three: labels PlexCond (the Karoo's field label font), numbers PlexReg
+// at 0.82 width (the Karoo's field numbers), the name PlexMed. Native ClimbER (ride app, read
+// 2026-11-08): header = climb number pill + three 30sp numbers centred with 1dp dividers;
+// a 30dp detail bar "To Top" + distance + height in 26sp white; climb blue
+// #005297 (600) / #00294B (700) / #2386D9 (500) / #A3D5FF (400). 1 dp = 1.875 px on a Karoo 3.
+const CB = { b400: '#A3D5FF', b500: '#2386D9', b600: '#005297', b700: '#00294B' };
+const gapNow = o => o.ahead ? CLIMB.ahead : CLIMB.behind;
+const nowGradeCol = () => gradeCol(CLIMB.grade);
+function divider(ctx, x, y1, y2, dark) { ctx.fillStyle = dark ? '#3A3A3A' : '#DDDDDD'; ctx.fillRect(Math.round(x), y1, 1, y2 - y1); }
+
+// A · Karoo field grid: every part sits like a Karoo field (header row, right-aligned label over
+// right-aligned number, 9 px right margin), one label size, one number size.
+function halfA(ctx, r, dark, o = {}) {
+  const ink = dark ? '#FFF' : '#000', muted = dark ? '#A8A8A8' : '#5E5E5E';
+  const base = r.y + 34;
+  mountain(ctx, r.x + 12, base, ink);
+  const nx = 44 + stravaIcon(ctx, r.x + 44, base, dark) + 8;
+  text(ctx, CLIMB.name.toUpperCase(), 'PlexCond', 31.875, ink, r.x + nx, base, 250, 1, 'left');
+  text(ctx, `${CLIMB.lengthKm} KM · ${CLIMB.avg}%`, 'PlexCond', 26, muted, r.x + r.w - 9, base);
+  const cols = [['STRAVA PR', CLIMB.pr, ink], ['VS PR', gapNow(o), gapCol(dark, !o.ahead)], ['ETA TO TOP', CLIMB.toTop, ink]];
+  const cw = r.w / 3, top = r.y + 50;
+  cols.forEach(([l, v, c], i) => {
+    const right = r.x + cw * (i + 1) - 9;
+    text(ctx, l, 'PlexCond', 26, ink, right, top + 24);
+    text(ctx, v, 'PlexReg', 64, c, right, top + 92, cw - 18, 0.82);
+    if (i) divider(ctx, r.x + cw * i, top + 4, top + 96, dark);
+  });
+  const b = { x: r.x + 12, y: r.y + 182, w: r.w - 24, h: 130 };
+  profile(ctx, b, dark, { ...o, big: true, markerTop: r.y + 176 });
+  text(ctx, `3.8 / ${CLIMB.lengthKm} KM`, 'PlexCond', 24, muted, r.x + 12, r.y + r.h - 9, 1e9, 1, 'left');
+  text(ctx, `${CLIMB.leftKm} KM · ${CLIMB.leftM} M TO TOP`, 'PlexCond', 24, muted, r.x + r.w - 9, r.y + r.h - 9);
+}
+
+// B · Native ClimbER: climb-blue header with the numbered pill and name, three centred numbers
+// with dividers, the profile, the blue "TO TOP" detail bar at the bottom. Blue in light and dark.
+function halfB(ctx, r, dark, o = {}) {
+  const ink = dark ? '#FFF' : '#000';
+  const bandH = 60;
+  ctx.fillStyle = CB.b600; ctx.fillRect(r.x, r.y, r.w, bandH);
+  // pill with the climb number
+  ctx.fillStyle = CB.b700; ctx.beginPath(); ctx.roundRect(r.x + 10, r.y + 10, 44, 40, 15); ctx.fill();
+  ctx.strokeStyle = CB.b500; ctx.lineWidth = 2; ctx.stroke();
+  text(ctx, '1', 'PlexMed', 30, CB.b400, r.x + 32, r.y + 41, 1e9, 1, 'center');
+  const nx = 64 + stravaIcon(ctx, r.x + 64, r.y + 40, dark) + 8;
+  text(ctx, CLIMB.name, 'PlexMed', 30, '#FFF', r.x + nx, r.y + 41, 230, 1, 'left');
+  text(ctx, `${CLIMB.lengthKm} km · ${CLIMB.avg}%`, 'PlexMed', 22, CB.b400, r.x + r.w - 12, r.y + 39);
+  // three numbers, centred, label under (native: 30sp numbers, 1dp dividers)
+  const cols = [['STRAVA PR', CLIMB.pr, ink], ['VS PR', gapNow(o), gapCol(dark, !o.ahead)], ['ETA TO TOP', CLIMB.toTop, ink]];
+  const cw = r.w / 3, top = r.y + bandH;
+  cols.forEach(([l, v, c], i) => {
+    const cx = r.x + cw * i + cw / 2;
+    text(ctx, v, 'PlexReg', 60, c, cx, top + 60, cw - 16, 0.82, 'center');
+    text(ctx, l, 'PlexCond', 22, dark ? '#BDBDBD' : '#4A4A4A', cx, top + 88, 1e9, 1, 'center');
+    if (i) { ctx.fillStyle = CB.b500; ctx.fillRect(Math.round(r.x + cw * i), top + 14, 1.875, 78); }
+  });
+  const barH = 56;
+  const b = { x: r.x + 4, y: top + 120, w: r.w - 8, h: r.y + r.h - barH - (top + 120) };
+  profile(ctx, b, dark, { ...o, big: true, markerTop: top + 114 });
+  // detail bar: "TO TOP" + distance + height (native 30dp, ClimbDetailText 26sp white)
+  ctx.fillStyle = CB.b600; ctx.fillRect(r.x, r.y + r.h - barH, r.w, barH);
+  const by = r.y + r.h - 16;
+  text(ctx, 'TO TOP', 'PlexCond', 30, '#FFF', r.x + 12, by, 1e9, 1, 'left');
+  text(ctx, `${CLIMB.leftM} m`, 'PlexReg', 36, '#FFF', r.x + r.w - 12, by, 1e9, 0.82);
+  text(ctx, `${CLIMB.leftKm} km`, 'PlexReg', 36, '#FFF', r.x + r.w - 120, by, 1e9, 0.82);
+}
+
+// C · Profile first: name and the grade you're on over the profile, the profile big, a row of
+// three numbers along the bottom, everything left-aligned on one 12 px edge.
+function halfC(ctx, r, dark, o = {}) {
+  const ink = dark ? '#FFF' : '#000', muted = dark ? '#A8A8A8' : '#5E5E5E';
+  mountain(ctx, r.x + 12, r.y + 38, ink, 27);
+  const nx = 46 + stravaIcon(ctx, r.x + 46, r.y + 38, dark) + 8;
+  text(ctx, CLIMB.name, 'PlexMed', 30, ink, r.x + nx, r.y + 38, 250, 1, 'left');
+  text(ctx, `${CLIMB.lengthKm} km · ${CLIMB.avg}% · ${CLIMB.leftKm} km left`, 'PlexMed', 21, muted, r.x + 12, r.y + 70, 1e9, 1, 'left');
+  // grade now: a chip in its grade colour, black text (Karoo zone style)
+  ctx.fillStyle = nowGradeCol(); ctx.beginPath(); ctx.roundRect(r.x + r.w - 92, r.y + 12, 80, 40, 12); ctx.fill();
+  text(ctx, `${CLIMB.grade}%`, 'PlexSemi', 28, '#000', r.x + r.w - 52, r.y + 42, 1e9, 1, 'center');
+  const b = { x: r.x + 12, y: r.y + 96, w: r.w - 24, h: 124 };
+  profile(ctx, b, dark, { ...o, big: true, markerTop: r.y + 90 });
+  const cols = [['STRAVA PR', CLIMB.pr, ink], ['VS PR', gapNow(o), gapCol(dark, !o.ahead)], ['ETA TO TOP', CLIMB.toTop, ink]];
+  const cw = r.w / 3, top = r.y + 234;
+  ctx.fillStyle = dark ? '#3A3A3A' : '#DDDDDD'; ctx.fillRect(r.x, top, r.w, 1);
+  cols.forEach(([l, v, c], i) => {
+    const x = r.x + cw * i + 12;
+    text(ctx, l, 'PlexCond', 24, muted, x, top + 32, 1e9, 1, 'left');
+    text(ctx, v, 'PlexReg', 64, c, x, top + 100, cw - 20, 0.82, 'left');
+    if (i) divider(ctx, r.x + cw * i, top + 12, top + 104, dark);
+  });
+}
+
+// ---- Round 5: the Karoo's own climb graph --------------------------------------------
+// From ClimbER photos + the ride app's code (2026-11-08):
+// navy graph (#00294B) in light and dark; 100 m bars in grade colours; climbed part hatched;
+// a white ring where you are with a white line down; the next 500 m lit in climb blue 600
+// above the profile; a strip of 100 m grades (one decimal) in their colours, white lines between;
+// "TO TOP" bar in climb blue with distance + height left.
+// Grade colours (ride app, grade rounded to 0.1): <2 c1, <5 c2, <8 c3, <11 c4, <14 c5, <20 c6,
+// else c7; text black on c1..c4, white on c5..c7.
+const nGradeIdx = g => g < 2 ? 0 : g < 5 ? 1 : g < 8 ? 2 : g < 11 ? 3 : g < 14 ? 4 : g < 20 ? 5 : 6;
+const nGradeCol = g => CLIMB_COL[nGradeIdx(g)];
+const nGradeInk = g => nGradeIdx(g) >= 4 ? '#FFF' : '#000';
+// The demo climb at 100 m: the 400 m pieces with some wobble, one decimal.
+const G100 = Array.from({ length: 64 }, (_, i) => {
+  const base = CLIMB.grades[Math.floor(i / 4)];
+  return Math.max(0.5, Math.round((base + 1.4 * Math.sin(i * 1.3) + 0.7 * Math.sin(i * 2.7)) * 10) / 10);
+});
+let NOW_KM = 3.8;   // let: round 13 moves it to show the strip sliding
+let BAND = {};
+let WHOLE = true;
+let MARK_PX = 28;   // round 18: 28 px
+let MARK = 'edgeBracket';   // round 15: D without dimming (white edge + bracket); null: round 13's band
+//   // round 14: 'bracket' | 'spot' | 'end' | 'spotBracket' (null: round 13's band)   // round 13: half screens always show the whole climb   // round 9: the 500 m band's look, set per picture
+const E100 = [0]; G100.forEach((g, i) => E100.push(E100[i] + g));   // metres per 100 m = grade
+const elevAt = km => { const i = Math.min(63, Math.floor(km * 10)), f = km * 10 - i; return E100[i] + f * G100[i]; };
+
+// Round 33: before the climb, the road up to it from the route's elevation, in the first fifth
+// of the graph so the climb keeps the rest. APPROACH: 'fill' (a muted blue silhouette) or 'line'
+// (just the road as a light line, no fill); null: off. A dashed white line where the climb starts.
+let APPROACH = null;
+const APPROACH_SPLIT = 0.2, APPROACH_MUTED = '#3D6A93';
+const aElev = k => 14 * Math.sin(k * 1.9) + 9 * Math.sin(k * 4.3) - 6 * k;   // k ≤ 0: km before the start (0 m there)
+function approachGraph(ctx, b, o) {
+  const A = parseFloat(CLIMB.nextIn), L = CLIMB.lengthKm, mode = APPROACH, seg = o.seg ?? 0.1, gh = b.h;
+  ctx.save(); ctx.beginPath(); ctx.rect(b.x, b.y, b.w, b.h); ctx.clip();
+  ctx.fillStyle = CB.b700; ctx.fillRect(b.x, b.y, b.w, gh);
+  const sx = b.x + APPROACH_SPLIT * b.w;
+  const X = k => k < 0 ? b.x + (k + A) / A * (sx - b.x) : sx + k / L * (b.x + b.w - sx);
+  const E = k => k < 0 ? aElev(k) : elevAt(Math.min(k, 6.4));
+  let lo = 1e9, hi = -1e9; for (let k = -A; k <= L + 1e-9; k += 0.05) { const e = E(k); lo = Math.min(lo, e); hi = Math.max(hi, e); }
+  const head = o.head ?? 0.38;
+  const Y = e => b.y + gh - (0.1 + (1 - head - 0.1) * (e - lo) / Math.max(1, hi - lo)) * gh;
+  const grade = (k0, k1) => (E(k1) - E(k0)) / ((k1 - k0) * 10);
+  const rr = o.ring ?? 10, small = b.h < 150;
+  // the climb, as always
+  ctx.save(); ctx.beginPath(); ctx.moveTo(X(0), b.y + gh);
+  for (let k = 0; k <= L + 1e-9; k += 0.025) ctx.lineTo(X(k), Y(E(k)));
+  ctx.lineTo(X(L), b.y + gh); ctx.closePath(); ctx.clip();
+  for (let k = 0; k < L - 1e-9; k += seg) { ctx.fillStyle = nGradeCol(grade(k, Math.min(L, k + seg))); ctx.fillRect(X(k), b.y, X(Math.min(L, k + seg)) - X(k) + 0.6, gh); }
+  ctx.restore();
+  // the road up to it
+  ctx.beginPath(); ctx.moveTo(X(-A), Y(E(-A)));
+  for (let k = -A; k <= 1e-9; k += 0.025) ctx.lineTo(X(k), Y(E(Math.min(0, k))));
+  if (mode === 'fill') { ctx.lineTo(X(0), b.y + gh); ctx.lineTo(X(-A), b.y + gh); ctx.closePath(); ctx.fillStyle = APPROACH_MUTED; ctx.fill(); }
+  else { ctx.strokeStyle = CB.b400; ctx.lineWidth = small ? 2 : 3; ctx.lineJoin = 'round'; ctx.stroke(); }
+  // where the climb starts: a dashed white line, START over it on the bigger sizes
+  const top = Math.max(b.y + (small ? 4 : 30), Y(E(0)) - (small ? 24 : 70));
+  ctx.strokeStyle = '#FFF'; ctx.lineWidth = small ? 1.5 : 2; ctx.setLineDash(small ? [3, 3] : [5, 4]);
+  ctx.beginPath(); ctx.moveTo(X(0), top); ctx.lineTo(X(0), b.y + gh); ctx.stroke(); ctx.setLineDash([]);
+  if (!small) text(ctx, 'START', 'PlexCond', 20, '#FFF', X(0) + 6, top + 14, 1e9, 1, 'left');
+  // you: at the left, where the road starts
+  const px = b.x + rr + 3, py = Y(E(-A + (px - b.x) / (sx - b.x) * A));
+  ctx.fillStyle = '#FFF'; ctx.fillRect(px - rr * 0.22, py, rr * 0.44, b.y + gh - py);
+  ctx.beginPath(); ctx.arc(px, py, rr, 0, Math.PI * 2); ctx.fillStyle = '#FFF'; ctx.fill();
+  ctx.beginPath(); ctx.arc(px, py, rr * 0.5, 0, Math.PI * 2); ctx.fillStyle = CB.b700; ctx.fill();
+  if (o.label) o.label(ctx, b, X, Y);
+  ctx.restore();
+}
+// The native graph in box b. o.from / o.to: km window (default whole climb); o.seg: km per bar
+// (0.1 native; 0.4 for tiny tiles); o.strip: height of the grade strip under it (0 = none);
+// o.ring: ring radius.
+function nGraph(ctx, b, o = {}) {
+  if (o.noYou && APPROACH) return approachGraph(ctx, b, o);   // round 33
+  const from = o.from ?? 0, to = o.to ?? CLIMB.lengthKm, seg = o.seg ?? 0.1;
+  const stripH = o.strip || 0, gh = b.h - stripH, NOW = o.noYou ? -1 : NOW_KM;
+  ctx.save(); ctx.beginPath(); ctx.rect(b.x, b.y, b.w, b.h); ctx.clip();
+  ctx.fillStyle = CB.b700; ctx.fillRect(b.x, b.y, b.w, gh);
+  const X = km => b.x + (km - from) / (to - from) * b.w;
+  let lo = 1e9, hi = -1e9; for (let k = from; k <= to + 1e-9; k += 0.05) { const e = elevAt(Math.min(k, 6.4)); lo = Math.min(lo, e); hi = Math.max(hi, e); }
+  const head = o.head ?? 0.38;                         // headroom above the profile (native: lots)
+  const Y = e => b.y + gh - (0.1 + (1 - head - 0.1) * (e - lo) / Math.max(1, hi - lo)) * gh;
+  const grade = (k0, k1) => (elevAt(Math.min(k1, 6.4)) - elevAt(k0)) / ((Math.min(k1, 6.4) - k0) * 10);
+  // next 500 m lit above the profile (native: a rect behind the profile), named when it fits.
+  // BAND (round 9 options): tone 'blue' (climb blue 600) or 'tonal' (a dark step up from the
+  // navy); reach 'full' (to the top) or 'short' (stops a little above the road in it).
+  if (!o.noYou && !o.noBand && !MARK) {   // one tile and two tiles: no band (round 10)
+    const band = Object.assign({ tone: 'blue', reach: 'short' }, BAND, o.band || {});   // round 10: C
+    const bx = X(NOW), bw = X(NOW + 0.5) - X(NOW);
+    let top = b.y;
+    if (band.reach === 'short') {
+      let minY = 1e9; for (let k = NOW; k <= NOW + 0.5; k += 0.025) minY = Math.min(minY, Y(elevAt(Math.min(k, 6.4))));
+      top = Math.max(b.y, minY - Math.max(26, gh * 0.24));
+    }
+    ctx.fillStyle = band.tone === 'tonal' ? '#0A3A66' : CB.b600;
+    if (band.reach === 'short') { ctx.beginPath(); ctx.roundRect(bx, top, bw, b.y + gh - top + 8, [6, 6, 0, 0]); ctx.fill(); }
+    else ctx.fillRect(bx, b.y, bw, gh);
+    if (o.bandLabel !== false) {
+      const fs = Math.max(15, Math.min(20, gh * 0.11));
+      ctx.font = `${fs}px PlexCond`;
+      const label = 'NEXT 500 M';
+      if (ctx.measureText(label).width + 14 <= bw) text(ctx, label, 'PlexCond', fs, band.tone === 'tonal' ? '#7FB4E6' : CB.b400, bx + 7, top + fs + 5, 1e9, 1, 'left');
+    }
+  }
+  const bars = [];
+  for (let k = Math.floor(from / seg) * seg; k < Math.min(to, 6.4) - 1e-9; k += seg) bars.push([k, k + seg]);
+  // Like the Karoo (ElevationAndGradeView): the profile is one smooth path through the
+  // elevation; each segment is a full-height rectangle in its grade colour, cut out by that path,
+  // so the tops follow the road instead of stepping. The climbed part gets navy stripes on top.
+  const profilePath = () => { ctx.beginPath(); ctx.moveTo(X(from), b.y + gh);
+    for (let k = from; k <= Math.min(to, 6.4) + 1e-9; k += 0.025) ctx.lineTo(X(k), Y(elevAt(Math.min(k, 6.4))));
+    ctx.lineTo(X(Math.min(to, 6.4)), b.y + gh); ctx.closePath(); };
+  ctx.save(); profilePath(); ctx.clip();
+  for (const [k0, k1] of bars) { ctx.fillStyle = nGradeCol(grade(k0, k1)); ctx.fillRect(X(k0), b.y, X(k1) - X(k0) + 0.6, gh); }
+  if (!o.noYou) {
+    ctx.beginPath(); ctx.rect(b.x, b.y, X(NOW) - b.x, gh); ctx.clip();
+    const hw = o.hatch ?? 3.2;
+    ctx.strokeStyle = CB.b700; ctx.lineWidth = hw * 1.3;
+    for (let x = b.x - gh; x < X(NOW) + gh; x += hw * 2.3) { ctx.beginPath(); ctx.moveTo(x, b.y + gh); ctx.lineTo(x + gh, b.y); ctx.stroke(); }
+  }
+  ctx.restore();
+  // Round 14: the next 500 m on the whole climb, with more contrast
+  if (MARK && !o.noYou && !o.noBand && stripH && NOW < CLIMB.lengthKm - 0.02) {   // on top: no bracket; only with the strip (round 20)
+    const x0 = X(NOW), x1 = X(Math.min(NOW + 0.5, 6.4)), bot = b.y + gh;
+    let minY = 1e9; for (let k = NOW; k <= NOW + 0.5; k += 0.025) minY = Math.min(minY, Y(elevAt(Math.min(k, 6.4))));
+    if (MARK === 'spot' || MARK === 'spotBracket' || MARK === 'edgeBracket') {
+      // the road beyond the 500 m dimmed (not in round 15's edgeBracket)
+      ctx.save(); profilePath(); ctx.clip();
+      if (MARK !== 'edgeBracket')
+      { ctx.fillStyle = 'rgba(0, 41, 75, 0.62)'; ctx.fillRect(x1, b.y, b.x + b.w - x1, gh); }
+      ctx.restore();
+      // and a white edge along the road for those 500 m (rounds 14–17; removed in round 18)
+      if (MARK !== 'edgeBracket') {
+        ctx.beginPath(); for (let k = NOW; k <= NOW + 0.5 + 1e-9; k += 0.025) ctx.lineTo(X(k), Y(elevAt(Math.min(k, 6.4))));
+        ctx.strokeStyle = '#FFF'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
+      }
+    }
+    if (MARK === 'end') {
+      // the Karoo's own way: a second, thinner white line where the 500 m ends
+      ctx.fillStyle = '#FFF'; ctx.fillRect(x1 - 1, Y(elevAt(Math.min(NOW + 0.5, 6.4))) - 14, 2, bot - Y(elevAt(Math.min(NOW + 0.5, 6.4))) + 14);
+      text(ctx, '500 M', 'PlexCond', 16, '#FFF', x1 + 5, Y(elevAt(Math.min(NOW + 0.5, 6.4))) - 4, 1e9, 1, 'left');
+    }
+    if (MARK === 'bracket' || MARK === 'spotBracket' || MARK === 'edgeBracket') {
+      // round 18: the bracket as thick as the white line under you (0.44 × the ring), its left
+      // end coming down to just above the ring, the right end to just above the road; label 28 px
+      const rr = o.ring ?? 11, lw = rr * 0.44, py = Y(elevAt(NOW));
+      const yb = Math.min(minY, py - rr) - 18, fs = MARK_PX, tick = (py - rr - 3) - yb;
+      ctx.strokeStyle = '#FFF'; ctx.lineWidth = lw; ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+      const yEnd = Y(elevAt(Math.min(NOW + 0.5, 6.4))) - 3;   // right end: just above the road at 500 m
+      ctx.beginPath(); ctx.moveTo(x0, yb + tick); ctx.lineTo(x0, yb); ctx.lineTo(x1, yb); ctx.lineTo(x1, Math.max(yb + 6, yEnd)); ctx.stroke();
+      ctx.font = `${fs}px PlexCond`;
+      // under 500 m to go the bracket says what's left (rounded to 10 m)
+      const left = Math.min(500, Math.round((CLIMB.lengthKm - NOW) * 100) * 10), mlabel = `${left} M`;
+      const tw = ctx.measureText(mlabel).width;
+      // keep the label inside the graph (near the top the bracket reaches the right edge)
+      const lx = Math.min(tw < x1 - x0 + 30 ? (x0 + x1) / 2 - tw / 2 : x0 - lw / 2, b.x + b.w - 8 - tw);
+      text(ctx, mlabel, 'PlexCond', fs, '#FFF', lx, yb - lw / 2 - 6, 1e9, 1, 'left');
+    }
+  }
+  // where you are: white line down, ring on the profile
+  const px = X(NOW), py = Y(elevAt(Math.max(0, NOW))), rr = o.ring ?? 11;
+  if (!o.noYou) {
+  ctx.fillStyle = '#FFF'; ctx.fillRect(px - rr * 0.22, py, rr * 0.44, b.y + gh - py);
+  ctx.beginPath(); ctx.arc(px, py, rr, 0, Math.PI * 2); ctx.fillStyle = '#FFF'; ctx.fill();
+  ctx.beginPath(); ctx.arc(px, py, rr * 0.5, 0, Math.PI * 2); ctx.fillStyle = CB.b700; ctx.fill(); }
+  // round 13: the strip is the NEXT 500 M, not the columns above it: five 100 m boxes, big,
+  // starting where you are and sliding left as you climb (the one you're in leaves on the left)
+  if (stripH && o.strip500 && !o.noYou) {
+    const sy = b.y + gh, bw5 = b.w / 5;
+    ctx.save(); ctx.beginPath(); ctx.rect(b.x, sy, b.w, stripH); ctx.clip();
+    // round 19: navy behind the boxes (was white), like the PR row under it
+    ctx.fillStyle = CB.b700; ctx.fillRect(b.x, sy, b.w, stripH);
+    for (let k0 = Math.floor(NOW * 10 + 1e-9) / 10; k0 < NOW + 0.5 - 1e-9 && k0 < CLIMB.lengthKm - 1e-9; k0 += 0.1) {
+      const x0 = b.x + (k0 - NOW) / 0.5 * b.w, x1 = x0 + bw5;
+      const g = grade(k0, k0 + 0.1);
+      ctx.fillStyle = nGradeCol(g); ctx.fillRect(x0 + 1, sy + 2, bw5 - 2, stripH - 2);
+      const vis = Math.min(x1, b.x + b.w) - Math.max(x0, b.x);
+      if (vis >= bw5 * 0.6) text(ctx, g.toFixed(1), 'PlexReg', stripH * 0.8, nGradeInk(g), Math.max(x0, b.x) + vis / 2, sy + stripH * 0.82, vis - 10, 0.82, 'center');
+    }
+    // the easter egg: SUMMIT REACHED rides in right behind the last box, slides with them,
+    // and comes to rest in the middle of the strip when you're on top
+    const xEnd = b.x + (CLIMB.lengthKm - NOW) / 0.5 * b.w;
+    if (xEnd < b.x + b.w) {
+      const fs = stripH * 0.5, label = 'SUMMIT REACHED';
+      ctx.font = `${fs}px PlexCond`;
+      const iw = fs * 1.1, tw = ctx.measureText(label).width, w = iw + 8 + tw;
+      const cx = Math.max(xEnd + 16 + w / 2, b.x + b.w / 2);
+      const lx = cx - w / 2, base = sy + stripH * 0.68;
+      icoFlag(ctx, lx, base - fs * 0.95, fs * 1.05, '#FFF');
+      text(ctx, label, 'PlexCond', fs, '#FFF', lx + iw + 8, base, 1e9, 1, 'left');
+    }
+    ctx.restore();
+  } else
+  // grade strip
+  if (stripH) {
+    const sy = b.y + gh;
+    for (const [k0, k1] of bars) {
+      const g = grade(k0, k1);
+      ctx.fillStyle = nGradeCol(g); ctx.fillRect(X(k0), sy, X(k1) - X(k0), stripH);
+      // only whole columns get their number (no cut-off grades at the edges)
+      if (k0 >= from - 1e-9 && k1 <= to + 1e-9) text(ctx, g.toFixed(1), 'PlexReg', stripH * 0.78, nGradeInk(g), (X(k0) + X(k1)) / 2, sy + stripH * 0.8, X(k1) - X(k0) - 8, 0.82, 'center');
+      ctx.fillStyle = '#FFF'; ctx.fillRect(X(k1) - 1, sy, 2, stripH);
+    }
+  }
+  if (o.label) o.label(ctx, b, X, Y);
+  ctx.restore();
+}
+// Native-style icons in the TO TOP bar: distance (two arrows) and height (a ramp)
+function icoDist(ctx, x, y, s, col) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s / 24, s / 24); ctx.strokeStyle = col; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(2, 8); ctx.lineTo(20, 8); ctx.moveTo(15, 3); ctx.lineTo(20, 8); ctx.lineTo(15, 13);
+  ctx.moveTo(22, 17); ctx.lineTo(4, 17); ctx.moveTo(9, 12); ctx.lineTo(4, 17); ctx.lineTo(9, 22); ctx.stroke(); ctx.restore();
+}
+function icoElev(ctx, x, y, s, col) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s / 24, s / 24); ctx.strokeStyle = col; ctx.lineWidth = 2.6; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(2, 21); ctx.lineTo(22, 21); ctx.lineTo(22, 5); ctx.closePath(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(14, 21); ctx.lineTo(14, 13); ctx.moveTo(18, 21); ctx.lineTo(18, 9); ctx.stroke(); ctx.restore();
+}
+// Round 23: the Karoo's climb page tiles: mint icon + white label (DIST TO TOP, ELEV TO TOP)
+const MINT = '#5BD69C';
+function icoClock(ctx, x, y, s, col) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s / 24, s / 24); ctx.strokeStyle = col; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(12, 13, 9.5, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(12, 13); ctx.lineTo(12, 7.5); ctx.moveTo(12, 13); ctx.lineTo(16, 15); ctx.stroke();
+  ctx.restore();
+}
+// Summit flag: a peak with a little flag on top (round 19)
+function icoFlag(ctx, x, y, s, col) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s / 24, s / 24); ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2.6; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(1, 23); ctx.lineTo(9, 11); ctx.lineTo(13, 16); ctx.lineTo(17, 10); ctx.lineTo(23, 23); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(17, 10); ctx.lineTo(17, 1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(17, 1); ctx.lineTo(23, 3.5); ctx.lineTo(17, 6); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+// Round 24: the Karoo's own glyphs, from the ride app (ic_climber, ic_distance, ic_elevation),
+// and its field-icon green (elementViewStreamStateConnectedColor: #129A5E light, #32E09A dark / on navy)
+const KAROO_GREEN = { light: '#129A5E', dark: '#32E09A' };
+const P_PR = new Path2D('M24.4903,33.3234C25.3046,35.7368 26.3614,38.6789 26.8245,38.842C27.5674,39.1036 29.1398,34.8839 29.1398,34.8839C29.1398,34.8839 32.9066,36.517 33.4237,35.9984C33.9407,35.4798 30.9008,28.449 30.3722,27.3432C29.8437,26.2375 29.2867,28.9218 27.4443,29.5677C26.8963,29.7597 26.2915,29.8181 25.7213,29.8292L24.4903,33.3234ZM15.0381,12.0115C14.1743,13.2445 15.0186,13.6975 14.5065,15.2636C13.9945,16.8297 13.022,16.8035 13.0002,18.2446C12.9785,19.6857 14.4179,21.1353 14.4179,21.1353C14.4179,21.1353 14.5149,23.6973 15.2154,24.7486C15.9158,25.7999 16.2391,25.1734 17.7849,26.2843C19.3307,27.3952 18.8305,27.9605 20.1772,28.4523C21.5239,28.9441 21.7744,28.091 23.5442,28.091C25.3139,28.091 25.5007,28.9016 26.8226,28.4523C28.1444,28.0031 27.8228,27.3335 29.1263,26.2843C30.4298,25.2352 31.2733,25.7372 32.1388,24.568C33.0044,23.3987 32.1456,23.0117 32.6705,21.4063C33.1954,19.8008 33.9775,19.8624 33.9995,18.3349C34.0216,16.8075 33.264,16.8302 32.7591,15.2636C32.2542,13.6969 32.9591,13.119 32.0502,11.9212C31.1413,10.7234 30.5759,11.3544 29.1263,10.2952C27.6767,9.236 27.9699,8.5411 26.8226,8.1272C25.6752,7.7133 25.4374,8.4378 23.7214,8.4885C22.0054,8.5392 21.5947,7.725 20.2658,8.1272C18.937,8.5294 19.4499,9.1652 18.0507,10.2049C16.6515,11.2445 15.902,10.7785 15.0381,12.0115ZM23.5,25.8779C27.612,25.8779 30.9455,22.4863 30.9455,18.3025C30.9455,14.1188 27.612,10.7271 23.5,10.7271C19.388,10.7271 16.0545,14.1188 16.0545,18.3025C16.0545,22.4863 19.388,25.8779 23.5,25.8779ZM23.5,24.6659C26.9794,24.6659 29.8,21.8169 29.8,18.3025C29.8,14.7882 26.9794,11.9392 23.5,11.9392C20.0206,11.9392 17.2,14.7882 17.2,18.3025C17.2,21.8169 20.0206,24.6659 23.5,24.6659ZM17.0044,27.6738C16.6569,28.5799 13.4423,35.5568 13.7899,36.2817C14.1374,37.0066 17.9601,35.1038 17.9601,35.1038C17.9601,35.1038 19.524,39 20.219,39C20.9141,39 23.6942,31.117 24.0417,29.939C24.3893,28.7611 21.7344,30.4828 20.0452,29.939C18.3561,29.3953 17.352,26.7677 17.0044,27.6738Z');   // ic_pr: the Karoo's Personal Record rosette (viewport 41, group translate -3)
+const P_CLIMB = new Path2D('M21.1809,37.5039L33.8665,9.9474H38.05L54.1094,45.4737H48.1715L35.8907,17.9172L23.2052,45.4737H19.0217L13.0512,31.7473L6.9665,45.4737H1.2753L4.7455,37.4302L10.1591,25.4332H15.8502L15.7688,25.6168H15.9177L21.1809,37.5039Z'), P_DIST = new Path2D('M28.5,24c3.038,0 5.5,2.462 5.5,5.5S31.538,35 28.5,35 23,32.538 23,29.5s2.462,-5.5 5.5,-5.5zM27.228,6.987c2.338,0 4.398,1.186 5.609,2.988 0.718,1.067 1.136,2.351 1.136,3.733 0,1.382 -0.418,2.665 -1.136,3.733 -1.21,1.803 -3.271,2.988 -5.609,2.988H10.744c-2.069,0 -3.746,1.672 -3.746,3.734 0,2.063 1.677,3.734 3.746,3.734h9.24v2.988l-9.24,-0.001c-2.339,0 -4.399,-1.186 -5.608,-2.987C4.418,26.83 4,25.546 4,24.163c0,-1.382 0.418,-2.667 1.136,-3.734 1.21,-1.802 3.27,-2.988 5.608,-2.988h16.484c2.07,0 3.747,-1.671 3.747,-3.733 0,-2.062 -1.678,-3.733 -3.747,-3.733h-9.242V6.987zM9.5,3C12.538,3 15,5.462 15,8.5S12.538,14 9.5,14 4,11.538 4,8.5 6.462,3 9.5,3z'), P_ELEV = new Path2D('M8.676,1.476l2.021,4.597 2.204,-3.352 3.727,6.467 -1.63,-0.074 -2.15,-3.584 -1.432,2.178 3.19,7.22h-0.08l-1.616,-0.02 -4.27,-9.71 -4.27,9.71 -1.615,0.02h-0.079l3.189,-7.22 -1.433,-2.178L2.284,9.115 0.653,9.188l3.727,-6.467L6.583,6.073l2.02,-4.597 0.036,0.082 0.036,-0.082z');
+function glyph(ctx, path, vb, x, y, s, col) { ctx.save(); ctx.translate(x, y); ctx.scale(s / vb, s / vb); ctx.fillStyle = col; ctx.fill(path); ctx.restore(); }
+function icoClimbK(ctx, x, y, s, col) { glyph(ctx, P_CLIMB, 54, x, y, s, col); }
+function icoDistK(ctx, x, y, s, col) { glyph(ctx, P_DIST, 38, x, y, s, col); }
+function icoElevK(ctx, x, y, s, col) { glyph(ctx, P_ELEV, 17, x, y, s, col); }
+// Native climb icon (zigzag peaks), stroked
+function icoClimb(ctx, x, y, s, col) { if (NATIVE_ICONS) return icoClimbK(ctx, x - s * 0.04, y - s * 0.05, s * 1.12, col);
+  ctx.save(); ctx.translate(x, y); ctx.scale(s / 24, s / 24); ctx.strokeStyle = col; ctx.lineWidth = 2.8; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(1, 21); ctx.lineTo(8, 8); ctx.lineTo(12, 15); ctx.lineTo(17, 4); ctx.lineTo(23, 21); ctx.stroke(); ctx.restore();
+}
+// The TO TOP bar (native: 30 dp, climb blue, white)
+// Round 20: the bar says what its numbers are. BAR: 'icons' (round 19), 'units' (A), 'words' (B)
+let BAR = 'native';
+let NATIVE_ICONS = true;   // round 24: the Karoo's own glyphs
+let ROW = 'plain';   // round 23: 'tiles' = the PR row as the Karoo's climb-page tiles
+function toTopBar(ctx, x, y, w, h) {
+  ctx.fillStyle = CB.b600; ctx.fillRect(x, y, w, h);
+  const base = y + h * 0.74;
+  if (BAR !== 'split') text(ctx, 'TO TOP', 'PlexCond', h * 0.56, '#FFF', x + 12, base, 1e9, 1, 'left');
+  if (BAR === 'icons') {
+    const s = h * 0.48;
+    icoElev(ctx, x + w - 10 - s, y + (h - s) / 2, s, '#FFF');
+    const w1 = text(ctx, String(CLIMB.leftM), 'PlexReg', h * 0.72, '#FFF', x + w - 18 - s, base, 1e9, 0.82);
+    icoDist(ctx, x + w - 18 - s - w1 - 12 - s, y + (h - s) / 2, s, '#FFF');
+    text(ctx, CLIMB.leftKm, 'PlexReg', h * 0.72, '#FFF', x + w - 18 - s - w1 - 20 - s, base, 1e9, 0.82);
+  } else if (BAR === 'native' || BAR === 'nativePlus') {
+    // Round 24: TO TOP big; the Karoo's distance and elevation glyphs in its field-icon green
+    // before each number, units after: [dist] 2.6 KM  [elev] 196 M (nativePlus: +196 M)
+    let R = x + w - 12; const sz = h * 0.46;
+    const u = (t) => { const ww = text(ctx, t, 'PlexCond', h * 0.4, CB.b400, R, base, 1e9, 1); R -= ww + 5; };
+    const n = (t) => { const ww = text(ctx, t, 'PlexReg', h * 0.72, '#FFF', R, base, 1e9, 0.82); R -= ww + 8; };
+    const i = (fn) => { fn(ctx, R - sz, y + (h - sz) / 2 + 1, sz, KAROO_GREEN.dark); R -= sz + 18; };
+    const lk = Math.max(0, CLIMB.lengthKm - NOW_KM), lm = Math.round(CLIMB.leftM * lk / 2.6);
+    u('M'); n((BAR === 'nativePlus' ? '+' : '') + lm); i(icoElevK); u('KM'); n(lk < 1 ? lk.toFixed(2) : lk.toFixed(1)); i(icoDistK);
+  } else if (BAR === 'nativeIcons') {
+    // A: the Karoo's icons in mint before each number, units after: [⇄] 2.6 KM  [ramp] 196 M
+    let R = x + w - 12; const sz = h * 0.42;
+    const u = (t) => { const ww = text(ctx, t, 'PlexCond', h * 0.4, CB.b400, R, base, 1e9, 1); R -= ww + 5; };
+    const n = (t) => { const ww = text(ctx, t, 'PlexReg', h * 0.72, '#FFF', R, base, 1e9, 0.82); R -= ww + 8; };
+    const i = (fn) => { fn(ctx, R - sz, y + (h - sz) / 2 + 2, sz, MINT); R -= sz + 18; };
+    const lk = Math.max(0, CLIMB.lengthKm - NOW_KM);
+    u('M'); n(String(Math.round(CLIMB.leftM * lk / 2.6))); i(icoElev); u('KM'); n(lk < 1 ? lk.toFixed(2) : lk.toFixed(1)); i(icoDist);
+  } else if (BAR === 'split') {
+    // B: two of the Karoo's climb-page fields side by side: [⇄] DIST TO TOP 2.6 | [ramp] ELEV TO TOP 196
+    const hw = w / 2, sz = h * 0.4, lk = Math.max(0, CLIMB.lengthKm - NOW_KM);
+    [[icoDist, 'DIST TO TOP', lk < 1 ? lk.toFixed(2) : lk.toFixed(1)], [icoElev, 'ELEV TO TOP', String(Math.round(CLIMB.leftM * lk / 2.6))]].forEach(([fn, l, v], k) => {
+      const x0 = x + k * hw;
+      fn(ctx, x0 + 10, y + (h - sz) / 2, sz, MINT);
+      text(ctx, l, 'PlexCond', h * 0.38, '#FFF', x0 + 16 + sz, base - 2, 1e9, 1, 'left');
+      text(ctx, v, 'PlexReg', h * 0.66, '#FFF', x0 + hw - 10, base, 1e9, 0.82);
+      if (k) { ctx.fillStyle = CB.b700; ctx.fillRect(x0 - 1, y + 8, 2, h - 16); }
+    });
+    return;
+  } else if (BAR === 'units') {
+    // A: the units in the Karoo's label capitals right after each number: 2.6 KM   196 M
+    let R = x + w - 12;
+    const u = (t) => { const ww = text(ctx, t, 'PlexCond', h * 0.4, CB.b400, R, base, 1e9, 1); R -= ww + 5; };
+    const n = (t) => { const ww = text(ctx, t, 'PlexReg', h * 0.72, '#FFF', R, base, 1e9, 0.82); R -= ww + 18; };
+    const lk = Math.max(0, CLIMB.lengthKm - NOW_KM), lm = Math.round(elevAt(CLIMB.lengthKm) - elevAt(NOW_KM)) * (CLIMB.leftM / Math.max(1, Math.round(elevAt(CLIMB.lengthKm) - elevAt(3.8))));
+    u('M'); n(String(Math.round(lm))); u('KM'); n(lk < 1 ? lk.toFixed(2) : lk.toFixed(1));   // round 22: no UP; follows the position
+  } else {
+    // B: in words, smaller: 2.6 km to go · 196 m to climb
+    text(ctx, `${CLIMB.leftKm} km to go · ${CLIMB.leftM} m to climb`, 'PlexMed', h * 0.42, '#FFF', x + w - 12, base, w - 150);
+  }
+}
+// Name over the graph's empty sky, top left (white on navy)
+const nameOnGraph = (size = 26) => (ctx, b) => {
+  icoClimb(ctx, b.x + 10, b.y + 10, size * 0.95, CB.b400);
+  const x = b.x + 10 + size + 8;
+  const w = stravaIcon(ctx, x, b.y + 10 + size * 0.85, true, PR_ICON, size * 0.85);
+  text(ctx, CLIMB.name, 'PlexMed', size, '#FFF', x + w + 8, b.y + 10 + size * 0.85, 240, 1, 'left');
+};
+// Three numbers on navy, native-tile style (icon top left in climb blue 400, label right, number)
+function navyTile(ctx, r, icon, label, value, col) {
+  ctx.fillStyle = CB.b700; ctx.beginPath(); ctx.roundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 12); ctx.fill();
+  ctx.strokeStyle = CB.b500; ctx.lineWidth = 1.5; ctx.stroke();
+  icon(ctx, r.x + 10, r.y + 10);
+  text(ctx, label, 'PlexCond', 22, '#FFF', r.x + r.w - 9, r.y + 30, r.w - 52);
+  text(ctx, value, 'PlexReg', Math.min(r.h * 0.55, 60), col, r.x + r.w - 9, r.y + r.h - 12, r.w - 18, 0.82);
+}
+const gapNavy = o => o.ahead ? '#60EEB2' : '#FF6A5E';
+
+// A · Native graph + TO TOP bar on top, PR row under (like the map page's climb drawer)
+// o.items: { name, pr, gap, top } (Settings › Half screen shows); o.idle: not on a climb yet.
+function halfNA(ctx, r, dark, o = {}) {
+  const sh = Object.assign({ name: true, pr: true, gap: true, top: true }, o.items || {});
+  if (o.idle) {
+    // Before the climb: the bar says how far to its start; the whole climb, nothing climbed yet
+    ctx.fillStyle = CB.b600; ctx.fillRect(r.x, r.y, r.w, 56);
+    text(ctx, 'NEXT CLIMB IN', 'PlexCond', 31, '#FFF', r.x + 12, r.y + 41, 1e9, 1, 'left');
+    const uw = text(ctx, 'KM', 'PlexCond', 22, CB.b400, r.x + r.w - 12, r.y + 41);   // round 22: units, like TO TOP
+    text(ctx, CLIMB.nextIn, 'PlexReg', 40, '#FFF', r.x + r.w - 12 - uw - 5, r.y + 41, 1e9, 0.82);
+  } else toTopBar(ctx, r.x, r.y, r.w, 56);
+  const label = sh.name ? nameOnGraph(24) : null;
+  if (o.idle) {
+    nGraph(ctx, { x: r.x, y: r.y + 56, w: r.w, h: r.h - 56 - 92 }, { seg: 0.2, hatch: 2, head: 0.3, label, noYou: true });
+  } else {
+    // Only the biggest size (half screen and up) has room for the grade strip, like the
+    // Karoo's ClimbER drawer; smaller ones show just the graph (like its climb-graph field).
+    const big = r.h >= 330;
+    if (WHOLE) {
+      // round 13: always the whole climb, like the Karoo; the strip shows the next 500 m
+      nGraph(ctx, { x: r.x, y: r.y + 56, w: r.w, h: r.h - 56 - 92 }, { seg: 0.1, strip: big ? 52 : 0, strip500: true, hatch: 2.2, ring: 10, head: 0.32, label });
+    } else {
+      // the zoomed window starts on a 100 m mark: 5 columns behind you, 7 ahead
+      const from = Math.floor(NOW_KM * 10) / 10 - 0.5;
+      nGraph(ctx, { x: r.x, y: r.y + 56, w: r.w, h: r.h - 56 - 92 }, { from, to: from + 1.2, strip: big ? 42 : 0, label });
+    }
+  }
+  const y = r.y + r.h - 92, h = 92;
+  ctx.fillStyle = CB.b700; ctx.fillRect(r.x, y, r.w, h);
+  const cols = [];
+  if (o.idle) cols.push(['STRAVA PR', CLIMB.pr, '#FFF'], ['LENGTH', `${CLIMB.lengthKm} km`, '#FFF'], ['CLIMB', `${CLIMB.gainM} m`, '#FFF']);
+  else {
+    if (sh.pr) cols.push(['STRAVA PR', CLIMB.pr, '#FFF']);
+    if (sh.gap) cols.push(['VS PR', gapNow(o), gapNavy(o)]);
+    if (sh.top) { const t = Math.round(582 * Math.max(0, CLIMB.lengthKm - NOW_KM) / 2.6); cols.push(['ETA TO TOP', `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`, '#FFF']); }
+  }
+  const cw = r.w / Math.max(1, cols.length);
+  const size = cols.length === 3 ? 52 : cols.length === 2 ? 60 : 66;
+  if (ROW === 'tiles') {
+    // C: like the Karoo's climb page: each a navy tile with a blue edge, mint icon + white label, number
+    const icons = { 'STRAVA PR': (c, x, yy) => stravaIcon(c, x, yy + 20, true, PR_ICON, 20), 'VS PR': (c, x, yy) => stravaIcon(c, x, yy + 20, true, PR_ICON, 20),
+      'ETA TO TOP': (c, x, yy) => icoClock(c, x, yy, 20, MINT), 'LENGTH': (c, x, yy) => icoDist(c, x, yy, 20, MINT), 'CLIMB': (c, x, yy) => icoElev(c, x, yy, 20, MINT) };
+    cols.forEach(([l, v, c], i) => {
+      const tx = r.x + 4 + i * (r.w - 8) / cols.length, tw = (r.w - 8) / cols.length - 4;
+      ctx.fillStyle = CB.b700; ctx.beginPath(); ctx.roundRect(tx, y + 4, tw, h - 8, 10); ctx.fill();
+      ctx.strokeStyle = CB.b500; ctx.lineWidth = 1.5; ctx.stroke();
+      icons[l](ctx, tx + 8, y + 11);
+      text(ctx, l, 'PlexCond', 20, '#FFF', tx + 34, y + 28, tw - 40, 1, 'left');
+      text(ctx, v, 'PlexReg', size * 0.9, c, tx + tw - 8, y + h - 14, tw - 16, 0.82);
+    });
+    return;
+  }
+  cols.forEach(([l, v, c], i) => {
+    const right = r.x + cw * (i + 1) - 10;
+    text(ctx, l, 'PlexCond', 23, CB.b400, right, y + 27);
+    text(ctx, v, 'PlexReg', size, c, right, y + h - 14, cw - 20, 0.82);   // round 27: 14 px, as the Karoo's values
+    // round 20: no light-blue dividers (spacing does it)
+  });
+}
+// B · Native climb page: graph + strip on top, three navy tiles under it
+function halfNB(ctx, r, dark, o = {}) {
+  ctx.fillStyle = '#001A30'; ctx.fillRect(r.x, r.y, r.w, r.h);
+  nGraph(ctx, { x: r.x, y: r.y, w: r.w, h: 200 }, { from: 3.3, to: 4.5, strip: 42, label: nameOnGraph(24) });
+  const y = r.y + 204, h = r.h - 204, tw = (r.w - 4) / 3;
+  const medal = (c, x, yy) => stravaIcon(c, x, yy + 22, true, PR_ICON, 22);
+  navyTile(ctx, { x: r.x, y, w: tw, h }, medal, 'STRAVA PR', CLIMB.pr, '#FFF');
+  navyTile(ctx, { x: r.x + tw + 2, y, w: tw, h }, medal, 'VS PR', gapNow(o), gapNavy(o));
+  navyTile(ctx, { x: r.x + 2 * (tw + 2), y, w: tw, h }, (c, x, yy) => icoClimb(c, x, yy, 24, CB.b400), 'ETA TO TOP', CLIMB.toTop, '#FFF');
+}
+// C · Karoo field numbers on top (black / white like the fields around it), the whole climb as
+// the native graph under it, TO TOP bar at the bottom
+function halfNC(ctx, r, dark, o = {}) {
+  const ink = dark ? '#FFF' : '#000';
+  const base = r.y + 34;
+  icoClimb(ctx, r.x + 12, base - 22, 24, ink);
+  const nx = 44 + stravaIcon(ctx, r.x + 44, base, dark) + 8;
+  text(ctx, CLIMB.name.toUpperCase(), 'PlexCond', 31.875, ink, r.x + nx, base, 250, 1, 'left');
+  text(ctx, `${CLIMB.lengthKm} KM · ${CLIMB.avg}%`, 'PlexCond', 26, dark ? '#A8A8A8' : '#5E5E5E', r.x + r.w - 9, base);
+  const cols = [['STRAVA PR', CLIMB.pr, ink], ['VS PR', gapNow(o), gapCol(dark, !o.ahead)], ['ETA TO TOP', CLIMB.toTop, ink]];
+  const cw = r.w / 3, top = r.y + 44;
+  cols.forEach(([l, v, c], i) => {
+    const right = r.x + cw * (i + 1) - 9;
+    text(ctx, l, 'PlexCond', 24, ink, right, top + 24);
+    text(ctx, v, 'PlexReg', 58, c, right, top + 86, cw - 18, 0.82);
+    if (i) divider(ctx, r.x + cw * i, top + 4, top + 90, dark);
+  });
+  nGraph(ctx, { x: r.x, y: r.y + 142, w: r.w, h: 154 }, { seg: 0.2, ring: 9, hatch: 2, head: 0.18 });
+  toTopBar(ctx, r.x, r.y + 296, r.w, r.h - 296);
+}
+// Tiles with the native graph (for comparison with rounds 1-3)
+function smallN(ctx, r, dark, o = {}) {
+  const ink = dark ? '#FFF' : '#000', show = o.idle ? 'next' : (o.show || 'top');
+  const ls = 31.875, base = r.y + 8 + ls * 0.82;
+  icoClimb(ctx, r.x + 12, base - 22, 24, ink);
+  const left = show === 'pr' ? 44 + stravaIcon(ctx, r.x + 44, base, dark) + 8 : 46;
+  text(ctx, show === 'next' ? 'NEXT CLIMB IN' : LABEL[show], 'PlexCond', ls, ink, r.x + r.w - 8, base, r.w - left - 8);
+  if (show === 'dist' || show === 'next') {
+    text(ctx, show === 'next' ? CLIMB.nextIn : CLIMB.leftKm, 'PlexReg', 56, ink, r.x + r.w - 8 - 30, r.y + 92, r.w, 0.82);
+    text(ctx, 'km', 'PlexCond', 24, ink, r.x + r.w - 8, r.y + 92);
+  } else {
+    const val = show === 'top' ? CLIMB.toTop : gapNow(o), col = show === 'top' ? ink : gapCol(dark, !o.ahead);
+    text(ctx, val, 'PlexReg', 56, col, r.x + r.w - 8, r.y + 92, r.w - 16, 0.82);
+  }
+  const g = { x: r.x + 6, y: r.y + 102, w: r.w - 12, h: r.h - 108 };
+  ctx.save(); ctx.beginPath(); ctx.roundRect(g.x, g.y, g.w, g.h, 8); ctx.clip();
+  nGraph(ctx, g, { seg: 0.4, ring: 6, hatch: 1.6, head: 0.15, noBand: true, noYou: show === 'next' });
+  ctx.restore();
+}
+function wideN(ctx, r, dark, o = {}) {
+  const ink = dark ? '#FFF' : '#000', muted = dark ? '#A8A8A8' : '#5E5E5E', show = o.idle ? 'next' : (o.show || 'top');
+  const ls = 31.875, base = r.y + 8 + ls * 0.82;
+  icoClimb(ctx, r.x + 12, base - 22, 24, ink);
+  const pr = show === 'pr' || show === 'both';
+  const nameX = pr ? 44 + stravaIcon(ctx, r.x + 44, base, dark) + 8 : 46;
+  text(ctx, CLIMB.name, 'PlexMed', 26, ink, r.x + nameX, base, 200, 1, 'left');
+  text(ctx, show === 'next' ? 'NEXT CLIMB IN' : LABEL[show === 'both' ? 'top' : show], 'PlexCond', ls, ink, r.x + r.w - 8, base);
+  const g = { x: r.x + 6, y: r.y + 50, w: 272, h: r.h - 56 };
+  ctx.save(); ctx.beginPath(); ctx.roundRect(g.x, g.y, g.w, g.h, 8); ctx.clip();
+  nGraph(ctx, g, { seg: 0.2, ring: 7, hatch: 1.8, head: 0.2, noBand: true, noYou: show === 'next' });
+  ctx.restore();
+  const R = r.x + r.w - 8;
+  if (show === 'dist' || show === 'next') {
+    text(ctx, show === 'next' ? CLIMB.nextIn : CLIMB.leftKm, 'PlexReg', 72, ink, R - 34, r.y + 122, 150, 0.82);
+    text(ctx, 'km', 'PlexCond', 26, ink, R, r.y + 122);
+    text(ctx, show === 'next' ? `${CLIMB.lengthKm} km · ${CLIMB.avg}%` : `${CLIMB.leftM} m to climb`, 'PlexMed', 21, muted, R, r.y + 157);
+    return;
+  }
+  text(ctx, show === 'pr' ? gapNow(o) : CLIMB.toTop, 'PlexReg', 72, show === 'pr' ? gapCol(dark, !o.ahead) : ink, R, r.y + 122, 180, 0.82);
+  if (show === 'both') {
+    const w = text(ctx, 'VS PR', 'PlexCond', 24, muted, R, r.y + 157);
+    text(ctx, gapNow(o), 'PlexMed', 26, gapCol(dark, !o.ahead), R - w - 8, r.y + 157);
+  } else text(ctx, `${CLIMB.leftKm} km · ${CLIMB.leftM} m`, 'PlexMed', 21, muted, R, r.y + 157);
+}
+
+// A ride page with tiles at given rectangles: [{x, y, w, h, fn}] (fn null: a stock field)
+function pageTiles(ctx, dark, tiles) {
+  const bg = dark ? '#000' : '#FFF', ink = dark ? '#FFF' : '#000';
+  ctx.fillStyle = dark ? '#484848' : '#DDDDDD'; ctx.fillRect(0, 0, 480, 800);
+  ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(19, 19, 11, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(19, 19, 5, 0, Math.PI * 2); ctx.fill();
+  text(ctx, '1:12:40', 'PlexReg', 46, ink, 208, 50);
+  text(ctx, '100%', 'PlexReg', 34, ink, 318, 46, 1e9, 0.82);
+  text(ctx, '10:24', 'PlexReg', 46, ink, 470, 50);
+  const stocks = [F.power, F.hr, F.speed, F.lap];
+  let n = 0;
+  for (const t of tiles) {
+    ctx.save(); ctx.beginPath(); ctx.roundRect(t.x + 0.5, t.y + 0.5, t.w - 1, t.h - 1, 14);
+    ctx.fillStyle = bg; ctx.fill(); ctx.clip();
+    t.fn ? t.fn(ctx, t) : stock(ctx, t, stocks[n++ % stocks.length], dark);
+    ctx.restore();
+    ctx.beginPath(); ctx.roundRect(t.x + 0.5, t.y + 0.5, t.w - 1, t.h - 1, 14);
+    ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+  }
+}
+
+// Round 9: the 500 m band, four looks, at the biggest size and nearly half (field only)
+function bandGrid(dark) {
+  const S = 2, gap = 24, lab = 30, colW = 478, rows = [
+    ['A · Climb blue, to the top (now)', { tone: 'blue', reach: 'full' }],
+    ['B · Dark tonal, to the top', { tone: 'tonal', reach: 'full' }],
+    ['C · Climb blue, stops above the road', { tone: 'blue', reach: 'short' }],
+    ['D · Dark tonal, stops above the road', { tone: 'tonal', reach: 'short' }],
+  ];
+  const sizes = [455, 300];
+  const W = colW * 2 + gap, H = rows.length * (lab + sizes[0] + gap);
+  const c = document.createElement('canvas'); c.width = W * S; c.height = H * S; c.style.width = '780px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  rows.forEach(([name, band], j) => {
+    const y0 = j * (lab + sizes[0] + gap);
+    ctx.font = '18px PlexSemi'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'left'; ctx.fillText(name, 2, y0 + 20);
+    sizes.forEach((h, i) => {
+      const r = { x: i * (colW + gap), y: y0 + lab, w: colW, h };
+      BAND = band;
+      ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+      halfNA(ctx, r, dark, {}); ctx.restore();
+      ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+    });
+  });
+  BAND = {};
+  return c;
+}
+
+// ---- Round 11: two tiles, typography and alignment ---------------------------------------
+// One rule for all three: the big number sits on the graph's bottom edge (bottom aligned, like
+// the Karoo's own fields), the small line sits on the graph's top edge, everything on the right
+// ends 9 px from the tile edge. Labels in the Karoo's label font, numbers in its number font.
+function wideV(ctx, r, dark, v, o = {}) {
+  const ink = dark ? '#FFF' : '#000', muted = dark ? '#A8A8A8' : '#5E5E5E';
+  const R = r.x + r.w - 9;
+  const gap = gapNow(o), gapC = gapCol(dark, !o.ahead);
+  let G;
+  if (v === 'A' || v === 'B') {
+    const big = v === 'B';
+    const base = r.y + (big ? 40 : 34);
+    icoClimb(ctx, r.x + 12, base - 22, 24, ink);
+    const nx = 44 + stravaIcon(ctx, r.x + 44, base, dark) + 8;
+    const lw = text(ctx, 'ETA TO TOP', 'PlexCond', big ? 24 : 31.875, big ? muted : ink, R, big ? base - 4 : base);
+    text(ctx, CLIMB.name.toUpperCase(), 'PlexCond', big ? 40 : 31.875, ink, r.x + nx, base, r.w - nx - lw - 24, 1, 'left');
+    G = { x: r.x + 6, y: r.y + (big ? 56 : 50), w: 272, h: 0 };
+  } else {
+    G = { x: r.x + 6, y: r.y + 6, w: 272, h: 0 };
+    text(ctx, o.idle ? 'NEXT CLIMB IN' : 'ETA TO TOP', 'PlexCond', 31.875, ink, R, r.y + 8 + 31.875 * 0.82);
+  }
+  G.h = r.y + r.h - 6 - G.y;
+  ctx.save(); ctx.beginPath(); ctx.roundRect(G.x, G.y, G.w, G.h, 8); ctx.clip();
+  nGraph(ctx, G, { seg: 0.2, ring: 7, hatch: 1.8, head: v.startsWith('C') ? 0.42 : 0.2, noBand: true, noYou: !!o.idle,
+    label: v.startsWith('C') ? nameOnGraph(22) : null });
+  ctx.restore();
+  // round 12 (C2): the time under the label, VS PR under the time on the graph's bottom edge
+  if (v === 'C2' && o.idle) {
+    const bottom = r.y + r.h - 14;   // round 27: the Karoo's value baseline, 14 px above the bottom (KarooType.valueBaseline)
+    text(ctx, `${CLIMB.lengthKm} km · ${CLIMB.avg}%`, 'PlexMed', 21, muted, R, bottom);
+    const top = r.y + 8 + 31.875 * 0.82 + 10, numBase = bottom - 32;
+    const kw = text(ctx, 'km', 'PlexCond', 26, ink, R, numBase);
+    text(ctx, CLIMB.nextIn, 'PlexReg', Math.min(110, (numBase - top) / 0.72), ink, R - kw - 6, numBase, r.w - G.w - 60, 0.82);
+    return;
+  }
+  if (v === 'C2') {
+    const bottom = r.y + r.h - 14;   // round 27: the Karoo's value baseline, 14 px above the bottom (KarooType.valueBaseline)
+    const w2 = text(ctx, 'VS\u00A0PR', 'PlexCond', 24, muted, R, bottom);   // round 26: short VS PR on this line (not TIME TO PR)
+    text(ctx, gap, 'PlexMed', 26, gapC, R - w2 - 8, bottom);
+    const top = r.y + 8 + 31.875 * 0.82 + 10, numBase = bottom - 32;
+    text(ctx, CLIMB.toTop, 'PlexReg', Math.min(110, (numBase - top) / 0.72), ink, R, numBase, r.w - G.w - 30, 0.82);
+    return;
+  }
+  // right column: small line on the graph's top edge (C: under the label), number on its bottom edge
+  const subBase = v === 'C' ? r.y + 8 + 31.875 * 0.82 + 30 : G.y + 20;
+  const w = text(ctx, 'VS PR', 'PlexCond', 24, muted, R, subBase);
+  text(ctx, gap, 'PlexMed', 26, gapC, R - w - 8, subBase);
+  // as big as the room between the small line and the graph's bottom edge allows (digits ≈ 0.72 of the size)
+  const numSize = Math.min(110, ((G.y + G.h) - subBase - 12) / 0.72);
+  text(ctx, CLIMB.toTop, 'PlexReg', numSize, ink, R, G.y + G.h - 1, r.w - G.w - 30, 0.82);
+}
+function wideGrid(dark) {
+  const S = 2, gap = 22, lab = 28, rows = [['A · Karoo header', 'A'], ['B · Big name', 'B'], ['C · Name on the graph', 'C']], hs = [212, 168];
+  const W = 478, H = rows.length * (lab + hs[0] + gap + hs[1] + gap);
+  const c = document.createElement('canvas'); c.width = W * S; c.height = H * S; c.style.width = '390px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  let y = 0;
+  rows.forEach(([name, v]) => {
+    ctx.font = '17px PlexSemi'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'left'; ctx.fillText(name, 2, y + 19); y += lab;
+    hs.forEach(h => {
+      const r = { x: 0, y, w: W, h };
+      ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+      wideV(ctx, r, dark, v); ctx.restore();
+      ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+      y += h + gap;
+    });
+  });
+  return c;
+}
+
+// Round 13: the strip sliding, three moments 40 m apart (biggest size, field only)
+function slideRow(dark) {
+  const S = 2, W = 478, H = 455, gap = 18, kms = [3.80, 3.84, 3.88];
+  const c = document.createElement('canvas'); c.width = (W * 3 + gap * 2) * S; c.height = (H + 30) * S; c.style.width = '780px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  kms.forEach((km, i) => {
+    NOW_KM = km;
+    const r = { x: i * (W + gap), y: 30, w: W, h: H };
+    ctx.font = '18px PlexSemi'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'left'; ctx.fillText(`${km.toFixed(2)} km`, r.x + 4, 20);
+    ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+    halfNA(ctx, r, dark, {}); ctx.restore();
+    ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+  });
+  NOW_KM = 3.8;
+  return c;
+}
+
+// Round 14: next-500 m markers, at the biggest size and nearly half (field only)
+function markGrid() {
+  const S = 2, gap = 24, lab = 30, colW = 478, rows = [
+    ['Round 13 (lit box)', null], ['A · Bracket', 'bracket'], ['B · Spotlight', 'spot'], ['C · End line (like the Karoo)', 'end'], ['D · Spotlight + bracket', 'spotBracket'],
+  ];
+  const hs = [455, 300], W = colW * 2 + gap, H = rows.length * (lab + hs[0] + gap);
+  const c = document.createElement('canvas'); c.width = W * S; c.height = H * S; c.style.width = '780px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  rows.forEach(([name, mark], j) => {
+    const y0 = j * (lab + hs[0] + gap);
+    ctx.font = '18px PlexSemi'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'left'; ctx.fillText(name, 2, y0 + 20);
+    hs.forEach((h, i) => {
+      const r = { x: i * (colW + gap), y: y0 + lab, w: colW, h };
+      MARK = mark;
+      ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.fillStyle = '#FFF'; ctx.fill(); ctx.clip();
+      halfNA(ctx, r, false, {}); ctx.restore();
+      ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+    });
+  });
+  MARK = 'edgeBracket';
+  return c;
+}
+
+// Round 17: the 500 M label at 20 (built), 24 and 28 px, nearly half and biggest (field only)
+function labelGrid(dark) {
+  const S = 2, gap = 24, lab = 30, colW = 478, rows = [['20 px (on your Karoo now)', 20], ['A · 24 px', 24], ['B · 28 px', 28]], hs = [455, 300];
+  const W = colW * 2 + gap, H = rows.length * (lab + hs[0] + gap);
+  const c = document.createElement('canvas'); c.width = W * S; c.height = H * S; c.style.width = '780px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  rows.forEach(([name, px], j) => {
+    const y0 = j * (lab + hs[0] + gap);
+    ctx.font = '18px PlexSemi'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'left'; ctx.fillText(name, 2, y0 + 20);
+    hs.forEach((h, i) => {
+      const r = { x: i * (colW + gap), y: y0 + lab, w: colW, h };
+      MARK_PX = px;
+      ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+      halfNA(ctx, r, dark, {}); ctx.restore();
+      ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+    });
+  });
+  MARK_PX = 28;
+  return c;
+}
+
+// ---- Round 19: empty states ---------------------------------------------------------------
+// kind: 'noRoute' (no route with climbs loaded) or 'done' (past the last climb of the route).
+// The art: a big climb outline (no route) or the summit flag (done) on the navy graph, with a
+// line of white text and a light-blue hint. No dashes, no empty numbers.
+const EMPTY = {
+  noRoute: { title: 'NO ROUTE', head: 'No climbs yet', hint: 'Load a route with climbs', short: 'Load a route', icon: 'climb' },
+  done: { title: 'ALL CLIMBS DONE', head: 'That was the last climb', hint: '3/3 climbs done', short: '3/3 climbs done', icon: 'flag' },
+};
+function emptyArt(ctx, b, kind, k = 1) {
+  const e = EMPTY[kind];
+  ctx.fillStyle = CB.b700; ctx.fillRect(b.x, b.y, b.w, b.h);
+  // a faint ridge along the bottom, so it still reads as a climb graph
+  ctx.beginPath(); ctx.moveTo(b.x, b.y + b.h);
+  for (let i = 0; i <= 24; i++) { const t = i / 24; ctx.lineTo(b.x + t * b.w, b.y + b.h - (0.08 + 0.22 * t + 0.03 * Math.sin(t * 13)) * b.h); }
+  ctx.lineTo(b.x + b.w, b.y + b.h); ctx.closePath(); ctx.fillStyle = '#0A3A66'; ctx.fill();
+  const icon = 34 * k, head = 24 * k, hint = 21 * k;   // round 20: hint 21 (was 18)
+  const total = icon + 10 * k + head + 8 * k + hint, top = b.y + (b.h - total) / 2;
+  (e.icon === 'flag' ? icoFlag : icoClimb)(ctx, b.x + b.w / 2 - icon / 2, top, icon, e.icon === 'flag' ? '#FFF' : CB.b400);
+  text(ctx, e.head, 'PlexMed', head, '#FFF', b.x + b.w / 2, top + icon + 10 * k + head * 0.8, b.w - 20, 1, 'center');
+  text(ctx, e.hint, 'PlexMed', hint, CB.b400, b.x + b.w / 2, top + icon + 10 * k + head + 8 * k + hint * 0.8, b.w - 20, 1, 'center');
+}
+function emptySmall(ctx, r, dark, kind) {
+  const ink = dark ? '#FFF' : '#000', e = EMPTY[kind];
+  const ls = 31.875, base = r.y + 8 + ls * 0.82;
+  icoClimb(ctx, r.x + 12, base - 22, 24, ink);
+  text(ctx, kind === 'done' ? 'ALL DONE' : e.title, 'PlexCond', ls, ink, r.x + r.w - 8, base, r.w - 54);
+  ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 6, r.y + 50, r.w - 12, r.h - 56, 8); ctx.clip();
+  const b = { x: r.x + 6, y: r.y + 50, w: r.w - 12, h: r.h - 56 };
+  ctx.fillStyle = CB.b700; ctx.fillRect(b.x, b.y, b.w, b.h);
+  (e.icon === 'flag' ? icoFlag : icoClimb)(ctx, b.x + 14, b.y + b.h / 2 - 15, 30, e.icon === 'flag' ? '#FFF' : CB.b400);
+  text(ctx, e.short, 'PlexMed', 22, '#FFF', b.x + 56, b.y + b.h / 2 + 8, b.w - 66, 1, 'left');
+  ctx.restore();
+}
+function emptyWide(ctx, r, dark, kind) {
+  const ink = dark ? '#FFF' : '#000', muted = dark ? '#A8A8A8' : '#5E5E5E', e = EMPTY[kind];
+  ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 6, r.y + 6, 272, r.h - 12, 8); ctx.clip();
+  emptyArt(ctx, { x: r.x + 6, y: r.y + 6, w: 272, h: r.h - 12 }, kind, r.h > 180 ? 1 : 0.8);
+  ctx.restore();
+  const R = r.x + r.w - 9;
+  text(ctx, kind === 'done' ? 'ALL DONE' : e.title, 'PlexCond', 31.875, ink, R, r.y + 8 + 31.875 * 0.82, r.w - 300);
+  if (kind === 'done') {
+    text(ctx, '3/3', 'PlexReg', Math.min(84, (r.h - 100) / 0.72), ink, R, r.y + r.h - 46, r.w - 300, 0.82);
+    text(ctx, 'climbs done', 'PlexMed', 21, muted, R, r.y + r.h - 14);   // 14 px off the bottom, as the Karoo's values
+  } else text(ctx, 'Climbs come from', 'PlexMed', 21, muted, R, r.y + r.h - 40), text(ctx, 'your route', 'PlexMed', 21, muted, R, r.y + r.h - 14);
+}
+function emptyHalf(ctx, r, dark, kind) {
+  // round 21: no blue title bar when there's no climb right now; the art fills the field
+  emptyArt(ctx, { x: r.x, y: r.y, w: r.w, h: r.h }, kind, r.h > 400 ? 1.3 : 1.1);
+}
+// Summit sequence: the strip at 600, 300, 100 and 0 m from the top (biggest size, field only)
+function summitRow() {
+  const S = 2, W = 478, H = 455, gap = 18, kms = [CLIMB.lengthKm - 0.6, CLIMB.lengthKm - 0.3, CLIMB.lengthKm - 0.1, CLIMB.lengthKm];
+  const c = document.createElement('canvas'); c.width = (W * 2 + gap) * S; c.height = (2 * (H + 30) + gap) * S; c.style.width = '780px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  kms.forEach((km, i) => {
+    NOW_KM = km;
+    const r = { x: (i % 2) * (W + gap), y: Math.floor(i / 2) * (H + 30 + gap) + 30, w: W, h: H };
+    ctx.font = '18px PlexSemi'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'left';
+    ctx.fillText(i === 3 ? 'On top' : `${Math.round((CLIMB.lengthKm - km) * 1000)} m to the top`, r.x + 4, r.y - 10);
+    ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.fillStyle = '#FFF'; ctx.fill(); ctx.clip();
+    halfNA(ctx, r, false, {}); ctx.restore();
+    ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+  });
+  NOW_KM = 3.8;
+  return c;
+}
+
+// Round 20: the TO TOP bar, three ways (biggest size, field only)
+function barGrid() {
+  const S = 2, W = 478, H = 130, gap = 16, lab = 26, rows = [['Round 19: icons', 'icons'], ['A · Units', 'units'], ['B · In words', 'words']];
+  const c = document.createElement('canvas'); c.width = W * S; c.height = rows.length * (lab + H + gap) * S; c.style.width = '478px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  rows.forEach(([name, kind], j) => {
+    const y = j * (lab + H + gap);
+    ctx.font = '17px PlexSemi'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'left'; ctx.fillText(name, 2, y + 18);
+    BAR = kind;
+    ctx.save(); ctx.beginPath(); ctx.roundRect(0.5, y + lab + 0.5, W - 1, H - 1, 14); ctx.clip();
+    halfNA(ctx, { x: 0, y: y + lab, w: W, h: 455 }, false, {}); ctx.restore();
+  });
+  BAR = 'native';
+  return c;
+}
+
+// Round 23 options at the biggest size (field only), with a given BAR / ROW
+function optCanvas(bar, row, dark) {
+  const S = 2, W = 478, H = 455;
+  const c = document.createElement('canvas'); c.width = W * S; c.height = H * S; c.style.width = '380px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  BAR = bar; ROW = row;
+  ctx.save(); ctx.beginPath(); ctx.roundRect(0.5, 0.5, W - 1, H - 1, 14); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+  halfNA(ctx, { x: 0, y: 0, w: W, h: H }, dark, {}); ctx.restore();
+  ctx.beginPath(); ctx.roundRect(0.5, 0.5, W - 1, H - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+  BAR = 'native'; ROW = 'plain';
+  return c;
+}
+
+// Round 24: the bar with the Karoo's icons, two ways (biggest size, field only)
+function nativeBarGrid() {
+  const S = 2, W = 478, H = 130, gap = 16, lab = 26, rows = [['Round 22: units only', 'units'], ['A · Karoo icons', 'native'], ['B · Karoo icons, + on the height', 'nativePlus']];
+  const c = document.createElement('canvas'); c.width = W * S; c.height = rows.length * (lab + H + gap) * S; c.style.width = '478px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  rows.forEach(([name, kind], j) => {
+    const y = j * (lab + H + gap);
+    ctx.font = '17px PlexSemi'; ctx.fillStyle = '#E0E0E0'; ctx.textAlign = 'left'; ctx.fillText(name, 2, y + 18);
+    BAR = kind;
+    ctx.save(); ctx.beginPath(); ctx.roundRect(0.5, y + lab + 0.5, W - 1, H - 1, 14); ctx.clip();
+    halfNA(ctx, { x: 0, y: y + lab, w: W, h: 455 }, false, {}); ctx.restore();
+  });
+  BAR = 'native';
+  return c;
+}
+
+// ---- Round 28: empty states by the shared rule (KarooType.emptyPaint / emptyBaseline) -----------
+// The Karoo's empty tile ("No Sensor"): the label font at 25 px caps (~35 px), centred, ink bottom
+// 39 px above the tile bottom, shrunk to the tile width − 16.
+function emptyText(ctx, r, t, color) {
+  ctx.font = '35px PlexCond';
+  const room = r.w - 16, w = ctx.measureText(t).width, fs = w > room ? 35 * room / w : 35;
+  text(ctx, t, 'PlexCond', fs, color, r.x + r.w / 2, r.y + r.h - 39, 1e9, 1, 'center');
+}
+const EMPTY_WORDS = { noRoute: 'No Route', done: 'Climbs Done' };
+// A: like the Karoo's own empty field: its header stays (glyph + what the field shows), the value
+// becomes the empty text. One tile and two tiles; the half screen keeps its navy art.
+function emptyNativeSmall(ctx, r, dark, kind) {
+  const ink = dark ? '#FFF' : '#000';
+  const ls = 31.875, base = r.y + 8 + ls * 0.82;
+  icoClimb(ctx, r.x + 12, base - 22, 24, ink);
+  text(ctx, 'TIME TO TOP', 'PlexCond', ls, ink, r.x + r.w - 8, base, r.w - 54);
+  emptyText(ctx, r, kind === 'done' ? '3/3 Climbs Done' : EMPTY_WORDS[kind], ink);
+}
+function emptyNativeWide(ctx, r, dark, kind) {
+  const ink = dark ? '#FFF' : '#000';
+  const ls = 31.875, base = r.y + 8 + ls * 0.82;
+  icoClimb(ctx, r.x + 12, base - 22, 24, ink);
+  text(ctx, 'TIME TO TOP', 'PlexCond', ls, ink, r.x + r.w - 8, base, r.w - 54);
+  emptyText(ctx, r, kind === 'done' ? 'All 3 Climbs Done' : EMPTY_WORDS[kind], ink);
+}
+// B: the navy art stays, its words follow the rule (label font, 25 px caps, centred, 39 px up)
+function emptyArtRule(ctx, b, kind) {
+  ctx.fillStyle = CB.b700; ctx.fillRect(b.x, b.y, b.w, b.h);
+  ctx.beginPath(); ctx.moveTo(b.x, b.y + b.h);
+  for (let i = 0; i <= 24; i++) { const t = i / 24; ctx.lineTo(b.x + t * b.w, b.y + b.h - (0.08 + 0.22 * t + 0.03 * Math.sin(t * 13)) * b.h); }
+  ctx.lineTo(b.x + b.w, b.y + b.h); ctx.closePath(); ctx.fillStyle = '#0A3A66'; ctx.fill();
+  const icon = Math.min(40, b.h * 0.3);
+  (kind === 'done' ? icoFlag : icoClimb)(ctx, b.x + b.w / 2 - icon / 2, b.y + b.h - 39 - 35 - 12 - icon, icon, kind === 'done' ? '#FFF' : CB.b400);
+  emptyText(ctx, b, kind === 'done' ? '3/3 Climbs Done' : EMPTY_WORDS[kind], '#FFF');
+}
+
+// ---- Round 30: say it's Mountaineer, and what to do -----------------------------------------
+// v 'A': header = MOUNTAINEER; 'B': header stays TIME TO TOP, a small "Mountaineer" above the words.
+// Both: the empty text by the shared rule, a muted hint under it on the Karoo's 14 px baseline.
+function emptyNamed(ctx, r, dark, kind, v, small) {
+  const ink = dark ? '#FFF' : '#000', muted = dark ? '#A8A8A8' : '#5E5E5E';
+  const ls = 31.875, base = r.y + 8 + ls * 0.82;
+  icoClimb(ctx, r.x + 12, base - 22, 24, ink);
+  text(ctx, v === 'A' ? 'MOUNTAINEER' : 'TIME TO TOP', 'PlexCond', ls, ink, r.x + r.w - 8, base, r.w - 54);
+  const words = kind === 'done' ? (small ? '3/3 Climbs Done' : 'All 3 Climbs Done') : 'No Route';
+  emptyText(ctx, r, words, ink);
+  if (v === 'B') text(ctx, 'Mountaineer', 'PlexMed', 19, muted, r.x + r.w / 2, r.y + r.h - 39 - 35 - 4, 1e9, 1, 'center');
+  const hint = kind === 'done' ? (small ? 'on this route' : 'That was the last climb on this route') : (small ? 'Load a route' : 'Load a route with climbs');
+  text(ctx, hint, 'PlexMed', small ? 18 : 20, muted, r.x + r.w / 2, r.y + r.h - 14, r.w - 16, 1, 'center');
+}
+
+// Round 31: A, with the words and the hint centred in the space under the header
+function emptyCentred(ctx, r, dark, kind, small) {
+  const ink = dark ? '#FFF' : '#000', muted = dark ? '#A8A8A8' : '#5E5E5E';
+  const ls = 31.875, base = r.y + 8 + ls * 0.82;
+  icoClimb(ctx, r.x + 12, base - 22, 24, ink);
+  text(ctx, 'MOUNTAINEER', 'PlexCond', ls, ink, r.x + r.w - 8, base, r.w - 54);
+  const words = kind === 'done' ? (small ? '3/3 Climbs Done' : 'All 3 Climbs Done') : 'No Route';
+  const hint = kind === 'done' ? (small ? 'on this route' : 'That was the last climb on this route') : (small ? 'Load a route' : 'Load a route with climbs');
+  // the group: words (caps 25 px) + 10 px + hint (cap ~13 px), centred between the header and the bottom
+  const capW = 25, hs = small ? 18 : 20, capH = hs * 0.7, gap = 12, groupH = capW + gap + capH;
+  const top = base + (r.y + r.h - base - groupH) / 2;
+  ctx.font = '35px PlexCond';
+  const room = r.w - 16, w = ctx.measureText(words).width, fs = w > room ? 35 * room / w : 35;
+  text(ctx, words, 'PlexCond', fs, ink, r.x + r.w / 2, top + capW, 1e9, 1, 'center');
+  text(ctx, hint, 'PlexMed', hs, muted, r.x + r.w / 2, top + capW + gap + capH, r.w - 16, 1, 'center');
+}
+
+// ---- Ride page --------------------------------------------------------------------
+// rows: array of row specs, each 's' (two quarter tiles) or a function for a wide row;
+// { half: fn } spans two rows. Our fields are given as functions (ctx, r).
+function page(ctx, dark, rows) {
+  const bg = dark ? '#000' : '#FFF', ink = dark ? '#FFF' : '#000';
+  ctx.fillStyle = dark ? '#484848' : '#DDDDDD'; ctx.fillRect(0, 0, 480, 800);
+  ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(19, 19, 11, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(19, 19, 5, 0, Math.PI * 2); ctx.fill();
+  text(ctx, '1:12:40', 'PlexReg', 46, ink, 208, 50);
+  text(ctx, '100%', 'PlexReg', 34, ink, 318, 46, 1e9, 0.82);
+  text(ctx, '10:24', 'PlexReg', 46, ink, 470, 50);
+  const stocks = [F.speed, F.hr, F.power, F.lap, F.lapspd, F.speed, F.hr, F.power];
+  let n = 0, row = 0;
+  const tile = (r, fn) => {
+    ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14);
+    ctx.fillStyle = bg; ctx.fill(); ctx.clip();
+    fn ? fn(ctx, r) : stock(ctx, r, stocks[n++ % stocks.length], dark);
+    ctx.restore();
+    ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14);
+    ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+  };
+  for (const spec of rows) {
+    const y = 60 + row * 180;
+    if (spec && spec.half) { tile({ x: 1, y, w: 478, h: 348 }, spec.half); row += 2; continue; }
+    if (typeof spec === 'function') tile({ x: 1, y, w: 478, h: 168 }, spec);
+    else { const [a, b] = Array.isArray(spec) ? spec : [null, null]; tile({ x: 1, y, w: 238, h: 168 }, a); tile({ x: 241, y, w: 238, h: 168 }, b); }
+    row++;
+  }
+}
+
+// ---- Settings (light) -------------------------------------------------------------
+const INK = '#1C2E2E', HELP = '#6F6F6F';
+function seg(ctx, y, items, sel) {
+  ctx.fillStyle = '#F4F4F4'; ctx.beginPath(); ctx.roundRect(22, y, 436, 70, 35); ctx.fill();
+  const w = 436 / items.length;
+  items.forEach((t, i) => {
+    if (i === sel) { ctx.fillStyle = '#3E5560'; ctx.beginPath(); ctx.roundRect(24 + i * w, y + 2, w - 4, 66, 33); ctx.fill(); }
+    ctx.font = '21px PlexMed'; ctx.fillStyle = i === sel ? '#FFF' : '#243535'; ctx.textAlign = 'center';
+    ctx.fillText(t, 22 + i * w + w / 2, y + 43); ctx.textAlign = 'left';
+  });
+}
+function title(ctx, t, y) { ctx.font = '26px PlexMed'; ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.fillText(t, 22, y); }
+function toggle(ctx, y, label, on) {
+  ctx.font = '24px PlexMed'; ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.fillText(label, 22, y + 34);
+  ctx.fillStyle = on ? '#3E5560' : '#D0D0D0'; ctx.beginPath(); ctx.roundRect(388, y + 12, 70, 36, 18); ctx.fill();
+  ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(on ? 440 : 406, y + 30, 14, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#E6E6E6'; ctx.fillRect(22, y + 60, 436, 1);
+}
+function statusBar(ctx) {
+  ctx.fillStyle = '#FFF'; ctx.fillRect(0, 0, 480, 800);
+  text(ctx, '100%', 'PlexReg', 30, '#000', 350, 38, 1e9, 0.9); text(ctx, '10:24', 'PlexReg', 34, '#000', 470, 38);
+}
+function example(ctx, y, h, draw, caption) {
+  ctx.fillStyle = '#F1F1EF'; ctx.beginPath(); ctx.roundRect(22, y, 436, h, 18); ctx.fill();
+  ctx.font = '15px PlexSemi'; ctx.fillStyle = '#6B6A66'; ctx.textAlign = 'left'; ctx.fillText('EXAMPLE', 40, y + 30);
+  const r = draw.r;
+  ctx.save(); ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 14); ctx.fillStyle = '#FFF'; ctx.fill(); ctx.clip();
+  draw.fn(ctx, r); ctx.restore();
+  ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#D5D4CF'; ctx.lineWidth = 1; ctx.stroke();
+  if (caption) { ctx.font = '15px PlexMed'; ctx.fillStyle = '#6B6A66'; ctx.textAlign = 'center'; ctx.fillText(caption, 240, y + h - 14); ctx.textAlign = 'left'; }
+}
+// Screen 1: name, Example (one tile), One tile / Two tiles
+function settings1(ctx) {
+  statusBar(ctx);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(66, 104); ctx.lineTo(38, 104); ctx.moveTo(50, 92); ctx.lineTo(38, 104); ctx.lineTo(50, 116); ctx.stroke();
+  ctx.font = '28px PlexMed'; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('Settings', 240, 114); ctx.textAlign = 'left';
+  ctx.font = '34px PlexSemi'; ctx.fillText('Mountaineer', 22, 196);
+  example(ctx, 218, 252, { r: { x: 121, y: 254, w: 238, h: 168 }, fn: (c, r) => smallN(c, r, false, { show: 'top' }) }, 'One tile');
+  title(ctx, 'One tile shows', 524); seg(ctx, 540, ['ETA to top', 'Dist to top', 'Gap to PR'], 0);
+  title(ctx, 'Two tiles show', 652); seg(ctx, 668, ['ETA', 'Distance', 'Gap to PR', 'Both'], 3);
+}
+// Screen 3: scrolled to the end, Example sticky (one tile VS PR): PR symbol, Strava
+function settings3(ctx, kind) {
+  statusBar(ctx);
+  const was = PR_ICON; PR_ICON = kind;
+  example(ctx, 60, 252, { r: { x: 121, y: 96, w: 238, h: 168 }, fn: (c, r) => smallN(c, r, false, { show: 'pr' }) }, 'One tile');
+  title(ctx, 'PR symbol', 366); seg(ctx, 382, ['PR medal', 'PR badge'], kind === 'medal' ? 0 : 1);
+  // the two choices drawn inside the segments, left of their names
+  stravaIcon(ctx, 22 + 109 - 78, 382 + 46, kind === 'medal', 'medal', 22);
+  stravaIcon(ctx, 22 + 327 - 80, 382 + 46, kind === 'badge', 'badge', 22);
+  ctx.fillStyle = '#E6E6E6'; ctx.fillRect(22, 486, 436, 1);
+  ctx.font = '24px PlexMed'; ctx.fillStyle = INK; ctx.fillText('Strava', 22, 530);
+  ctx.font = '20px PlexMed'; ctx.fillStyle = '#FC4C02'; ctx.textAlign = 'right'; ctx.fillText('Connect  ›', 458, 530); ctx.textAlign = 'left';
+  ctx.font = '18px PlexMed'; ctx.fillStyle = HELP; ctx.fillText('For your PR on each climb.', 22, 562);
+  PR_ICON = was;
+}
+// Screen 2: scrolled, Example sticky (now the half-screen look), what the half screen shows
+function settings2(ctx) {
+  statusBar(ctx);
+  example(ctx, 60, 300, { r: { x: 40, y: 92, w: 400, h: 254 }, fn: (c, r) => {
+    c.save(); c.translate(r.x, r.y); c.scale(400 / 478, 254 / 348);
+    halfNA(c, { x: 0, y: 0, w: 478, h: 348 }, false, {}); c.restore();
+  } });
+  title(ctx, 'Half screen shows', 400);
+  toggle(ctx, 412, 'Climb name', true);
+  toggle(ctx, 474, 'Strava PR', true);
+  toggle(ctx, 536, 'Gap to PR', true);
+  toggle(ctx, 598, 'ETA to top', true);
+  title(ctx, 'Climbed part', 700); seg(ctx, 716, ['Grey', 'Coloured'], 0);
+}
+
+// A feather (for the weight-weenie note): a vane with a quill, [s] px tall, at x, y (top left)
+function feather(ctx, x, y, s, col) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s / 24, s / 24); ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(20.5, 3.5); ctx.bezierCurveTo(13, 3.5, 6.5, 9, 6, 17.5); ctx.lineTo(9, 15.5); ctx.bezierCurveTo(15.5, 15, 20.5, 10, 20.5, 3.5); ctx.closePath(); ctx.globalAlpha = 0.18; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(3.5, 20.5); ctx.lineTo(16, 8); ctx.moveTo(9.5, 11.5); ctx.lineTo(13, 11.5); ctx.moveTo(8, 14); ctx.lineTo(11.5, 14.2); ctx.stroke();
+  ctx.restore();
+}
+// Round 47 v3: one base bike weight (8 kg standard, custom typed in), or one per ride profile.
+// mode 'one' | 'profiles'; base: custom kg or null; rows: [profile, custom kg or null]
+function settingsTime(ctx, mode, base, rows, focus, learn = false, scroll = 0) {
+  ctx.fillStyle = '#FFF'; ctx.fillRect(0, 0, 480, 800);
+  ctx.save(); ctx.translate(0, -scroll);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(66, 104); ctx.lineTo(38, 104); ctx.moveTo(50, 92); ctx.lineTo(38, 104); ctx.lineTo(50, 116); ctx.stroke();
+  ctx.font = '28px PlexMed'; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('Settings', 240, 114); ctx.textAlign = 'left';
+  const help = (t, y) => { ctx.font = '18px PlexMed'; ctx.fillStyle = HELP; t.split('\n').forEach((l, i) => ctx.fillText(l, 22, y + i * 26)); return y + t.split('\n').length * 26; };
+  const field = (x, y, kg, std, focused) => {   // PartnerETA's input: white, 2 px border, 8 dp corners
+    const bw = 140, bh = 54;
+    ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.roundRect(x, y, bw, bh, 10); ctx.fill();
+    ctx.strokeStyle = focused ? '#3E5560' : '#BDBDBD'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = '22px PlexMed'; ctx.textAlign = 'right'; ctx.fillStyle = kg == null ? '#A0A0A0' : INK; ctx.fillText((kg ?? std).toFixed(1), x + bw - 44, y + 35);
+    ctx.fillStyle = HELP; ctx.textAlign = 'left'; ctx.fillText('kg', x + bw - 36, y + 35);
+  };
+  const weenie = (kg, y) => {
+    if (kg == null || kg >= 6.8) return y;
+    const g = '#129A5E';
+    ctx.fillStyle = '#E2F2EA'; ctx.beginPath(); ctx.roundRect(22, y, 436, 48, 12); ctx.fill();
+    feather(ctx, 36, y + 11, 26, g);
+    ctx.font = '20px PlexMed'; ctx.fillStyle = g; ctx.fillText('Oh nice, a weight weenie build!', 72, y + 31);
+    return y + 62;
+  };
+  title(ctx, 'Time to top', 180);
+  ctx.font = '24px PlexMed'; ctx.fillStyle = INK; ctx.fillText('Bike weight', 22, 228);
+  seg(ctx, 246, ['One for all', 'Per ride profile'], mode === 'one' ? 0 : 1);
+  let y = 340;
+  if (mode === 'one') {
+    ctx.font = '22px PlexMed'; ctx.fillStyle = INK; ctx.fillText('All bikes', 22, y + 36);
+    field(318, y, base, 8.0, focus === 0); y += 72;
+    y = weenie(base, y);
+    y = help('Standard 8.0 kg (grey); type your own. With bottles\nand bags. Your own weight comes from your Karoo\nrider profile.', y + 4) + 10;
+  } else {
+    rows.forEach(([name, kg], i) => {
+      ctx.font = '22px PlexMed'; ctx.fillStyle = INK; ctx.fillText(name, 22, y + 36);
+      field(318, y, kg, base ?? 8.0, focus === i); y += 66;
+      y = weenie(kg, y);
+    });
+    y = help('Each profile you pick on the Karoo shows up here.\nNot filled in: the one-for-all weight (grey).', y + 4) + 10;
+  }
+  toggle(ctx, y, 'Wind', true);
+  y = help('Head- and tailwind on each part of the climb, from\nthe Open-Meteo forecast. No connection: no wind.', y + 96) + 10;
+  toggle(ctx, y, 'Improve over time', learn);
+  y = help('Logs each climb (your speed against your power,\nthe gradient and the wind) and learns from it, so\nthe time to top gets better with every climb.', y + 96);
+  // the privacy line, with a small lock
+  const ly = y + 14;
+  ctx.strokeStyle = HELP; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(24, ly - 14, 14, 11, 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(31, ly - 14, 4.5, Math.PI, 0); ctx.stroke();
+  ctx.font = '18px PlexMed'; ctx.fillStyle = HELP; ctx.fillText('The data stays on your Karoo and never leaves it.', 46, ly);
+  ctx.restore();
+  ctx.fillStyle = '#FFF'; ctx.fillRect(0, 0, 480, 60);
+  text(ctx, '100%', 'PlexReg', 30, '#000', 350, 38, 1e9, 0.9); text(ctx, '10:24', 'PlexReg', 34, '#000', 470, 38);
+}
+// ---- Bare field grid (no device) --------------------------------------------------
+function tiles(dark) {
+  const S = 2, W = 478 + 140, gap = 28, top = 16;
+  const items = [
+    ['One tile', [{ w: 238, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) }, { w: 238, fn: (c, r) => smallN(c, r, dark, { show: 'pr' }) }]],
+    ['', [{ w: 238, fn: (c, r) => smallN(c, r, dark, { show: 'pr', ahead: true }) }, { w: 238, fn: (c, r) => smallN(c, r, dark, { show: 'dist' }) }]],
+    ['', [{ w: 238, fn: (c, r) => smallN(c, r, dark, { idle: true }) }]],
+    ['Two tiles', [{ w: 478, fn: (c, r) => wideN(c, r, dark, { show: 'top' }) }]],
+    ['', [{ w: 478, fn: (c, r) => wideN(c, r, dark, { show: 'dist' }) }]],
+    ['', [{ w: 478, fn: (c, r) => wideN(c, r, dark, { show: 'both' }) }]],
+    ['', [{ w: 478, fn: (c, r) => wideN(c, r, dark, { show: 'pr', ahead: true }) }]],
+    ['', [{ w: 478, fn: (c, r) => wideN(c, r, dark, { idle: true }) }]],
+  ];
+  const H = top + items.length * (168 + gap);
+  const c = document.createElement('canvas'); c.width = W * S; c.height = H * S; c.style.width = '390px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  ctx.fillStyle = dark ? '#484848' : '#DDDDDD'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, 16); ctx.fill();
+  items.forEach(([lab, row], j) => {
+    const y = top + j * (168 + gap);
+    ctx.font = '15px PlexSemi'; ctx.fillStyle = dark ? '#E0E0E0' : '#333'; ctx.textAlign = 'left'; ctx.fillText(lab, 14, y + 89);
+    let x = 126;
+    row.forEach(t => {
+      const r = { x, y, w: t.w, h: 168 };
+      ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+      t.fn(ctx, r); ctx.restore();
+      ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+      x += t.w + 2;
+    });
+  });
+  return c;
+}
+
+// Strava symbol candidates side by side: one tile VS PR + two tiles Both, per symbol.
+function stravaGrid(dark) {
+  const S = 2, W = 140 + 238 + 2 + 478 + 14, gap = 28, top = 16;
+  const kinds = [['PR medal', 'medal'], ['PR badge', 'badge']];
+  const H = top + kinds.length * (168 + gap);
+  const c = document.createElement('canvas'); c.width = W * S; c.height = H * S; c.style.width = '780px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  ctx.fillStyle = dark ? '#484848' : '#DDDDDD'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, 16); ctx.fill();
+  kinds.forEach(([lab, kind], j) => {
+    const y = top + j * (168 + gap);
+    PR_ICON = kind;
+    ctx.font = '17px PlexSemi'; ctx.fillStyle = dark ? '#E0E0E0' : '#333'; ctx.textAlign = 'left'; ctx.fillText(lab, 16, y + 89);
+    [[126, 238, (c2, r) => smallN(c2, r, dark, { show: 'pr' })], [126 + 240, 478, (c2, r) => wideN(c2, r, dark, { show: 'both' })]].forEach(([x, w, fn]) => {
+      const r = { x, y, w, h: 168 };
+      ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+      fn(ctx, r); ctx.restore();
+      ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+    });
+  });
+  PR_ICON = 'medal';
+  return c;
+}
+
+let ICONS_IMG = {};
+(async () => {
+  for (const f of ['PlexReg', 'PlexCond', 'PlexMed', 'PlexSemi']) await document.fonts.load(`40px ${f}`);
+  try { await document.fonts.load('40px Relative'); HAS_RELATIVE = document.fonts.check('40px Relative'); } catch (e) {}
+  for (const [k, v] of Object.entries(ICONS)) ICONS_IMG[k] = await img(v);
+  const blank = document.createElement('canvas'); blank.width = 480; blank.height = 800;
+  const dev = await KarooDevice.load({ frame: '__FRAME__', screen: blank.toDataURL() });
+  const out = document.getElementById('out');
+  const W = 380;
+  const head = (t, note) => {
+    const h = document.createElement('h2'); h.textContent = t; out.append(h);
+    if (note) { const p = document.createElement('p'); p.className = 'note'; p.textContent = note; out.append(p); }
+    const row = document.createElement('div'); row.className = 'row'; out.append(row); return row;
+  };
+  const section = (t, note, makers) => { const row = head(t, note); for (const d of makers) row.append(dev.device(dev.screen({ draw: d, scale: 2 }), W)); };
+  const pair = rows => [false, true].map(dark => ctx => page(ctx, dark, rows(dark)));
+
+  section('Round 47 · Time to top settings', 'Bike weight: One for all (default): standard 8.0 kg in grey, type your own. Per ride profile: each profile you pick on the Karoo gets a row asking for that bike’s weight; empty rows use the one-for-all weight. Under 6.8 kg: the weight weenie note. Light only.',
+    [ctx => settingsTime(ctx, 'one', null, [], -1),
+     ctx => settingsTime(ctx, 'one', 6.4, [], 0, true),
+     ctx => settingsTime(ctx, 'one', 6.4, [], -1, true, 240),
+     ctx => settingsTime(ctx, 'profiles', null, [['Road', 7.6], ['Gravel', 10.2], ['BETA', null]], 1)]);
+  // Round 33: before the climb, the road up to it
+  { const p33 = (dark) => (ctx) => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'C2', { idle: true }) }, { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { idle: true }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, { idle: true }) }]);
+    const b33 = (dark) => (ctx) => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 455, fn: (c, r) => halfNA(c, r, dark, { idle: true }) }, { x: 1, y: 521, w: 238, h: 168, fn: null }, { x: 241, y: 521, w: 238, h: 168, fn: null }]);
+    const withA = (mode, draw) => (ctx) => { APPROACH = mode; draw(ctx); APPROACH = null; };
+    const opts = [['A · the road as a muted silhouette', 'fill', 'The climb keeps 80 % of the graph in its grade colours. The 3.2 km up to it is squeezed into the first fifth as a muted blue silhouette (its real ups and downs), you at the left. A dashed white line, START on the bigger sizes, where the climb begins.'],
+      ['B · the road as a line', 'line', 'The same, but the road up to the climb is only a light blue line, no fill: clearly not part of the climb.']];
+    section('Round 33 · now', 'Before the climb today: the climb alone, nothing about the road to it.', [false, true].map(dark => p33(dark)));
+    for (const [t, mode, note] of opts) {
+      section(`Round 33 · ${t}`, note, [false, true].map(dark => withA(mode, p33(dark))));
+      section(`Round 33 · ${t} · biggest size`, null, [false, true].map(dark => withA(mode, b33(dark))));
+    }
+  }
+
+  // Round 31
+  section('Round 31 · A, centred', 'MOUNTAINEER in the header; “No Route” and its hint centred together in the space under the header (the shared rule puts the words 39 px above the bottom; here they move up to the middle).',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyCentred(c, r, dark, 'noRoute', false) }, { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptyCentred(c, r, dark, 'noRoute', true) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyCentred(c, r, dark, 'noRoute', false) }])));
+  section('Round 31 · after the last climb, centred', null,
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyCentred(c, r, dark, 'done', false) }, { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptyCentred(c, r, dark, 'done', true) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyCentred(c, r, dark, 'done', false) }])));
+
+  // Round 30
+  section('Round 30 · A · the header says MOUNTAINEER', 'The ClimbER mountain and MOUNTAINEER as the field’s header, “No Route” by the shared rule, and a small hint under it on the Karoo’s 14 px baseline: “Load a route with climbs” (one tile: “Load a route”).',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyNamed(c, r, dark, 'noRoute', 'A', false) }, { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptyNamed(c, r, dark, 'noRoute', 'A', true) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyNamed(c, r, dark, 'noRoute', 'A', false) }])));
+  section('Round 30 · A · after the last climb', 'Hint: “That was the last climb on this route” (one tile: “on this route”).',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyNamed(c, r, dark, 'done', 'A', false) }, { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptyNamed(c, r, dark, 'done', 'A', true) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyNamed(c, r, dark, 'done', 'A', false) }])));
+  section('Round 30 · B · a small “Mountaineer” above the words', 'The header keeps TIME TO TOP; a small grey “Mountaineer” sits above “No Route”; the same hint under it.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyNamed(c, r, dark, 'noRoute', 'B', false) }, { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptyNamed(c, r, dark, 'noRoute', 'B', true) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyNamed(c, r, dark, 'noRoute', 'B', false) }])));
+
+  // Round 28
+  section('Round 28 · now (round 21)', 'For comparison: the built empty states, no route.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyWide(c, r, dark, 'noRoute') }, { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptySmall(c, r, dark, 'noRoute') },
+      { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyHalf(c, r, dark, 'noRoute') }])));
+  section('Round 28 · A · like the Karoo’s own empty field', 'One tile and two tiles become the Karoo’s empty tile: the header stays (what the field shows), and “No Route” takes the value’s place by the shared rule: label font at 25 px caps, centred, 39 px above the bottom. The half screen keeps its navy art, its words by the same rule.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyNativeWide(c, r, dark, 'noRoute') }, { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptyNativeSmall(c, r, dark, 'noRoute') },
+      { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyArtRule(c, r, 'noRoute') }])));
+  section('Round 28 · A · after the last climb', null,
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyNativeWide(c, r, dark, 'done') }, { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptyNativeSmall(c, r, dark, 'done') },
+      { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyArtRule(c, r, 'done') }])));
+  section('Round 28 · B · navy art everywhere, words by the rule', 'The navy boxes stay on every size; only the words follow the shared rule (one line, label font, 25 px caps, centred, 39 px above the bottom).',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyArtRule(c, r, 'noRoute') }, { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptyArtRule(c, r, 'noRoute') },
+      { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyArtRule(c, r, 'noRoute') }])));
+
+  // Round 25: the Karoo's own PR icon and names
+  const k25 = (draw) => (ctx) => { PR_ICON = 'karoo'; NAMES = 'karoo'; draw(ctx); };
+  const ours = (draw) => (ctx) => { PR_ICON = 'medal'; NAMES = 'ours'; draw(ctx); PR_ICON = 'karoo'; NAMES = 'karoo'; };
+  const yourPage = (dark) => (ctx) => pageTiles(ctx, dark, [
+    { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'C2') },
+    { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'pr' }) },
+    { x: 241, y: 278, w: 238, h: 168, fn: null },
+    { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) }]);
+  section('Round 25 · before: our names and PR medal', 'For comparison: STRAVA PR, VS PR, ETA TO TOP and our gold PR medal. One tile shows VS PR here.',
+    [false, true].map(dark => ours(yourPage(dark))));
+  section('Round 25 · the Karoo’s own PR icon and names', 'The Karoo’s Personal Record rosette (its ride app’s ic_pr, the icon its Strava Live Segments use) in the text colour, white on the navy. Its own names: PR (was STRAVA PR), TIME TO PR (was VS PR; the Karoo describes it as “time against PR”), and TIME TO TOP (was ETA TO TOP; the Karoo says “Time to Destination” for the same idea on a route).',
+    [false, true].map(dark => k25(yourPage(dark))));
+  section('Round 25 · biggest size', null,
+    [false, true].map(dark => k25((ctx) => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 455, fn: (c, r) => halfNA(c, r, dark, {}) },
+      { x: 1, y: 521, w: 238, h: 168, fn: null }, { x: 241, y: 521, w: 238, h: 168, fn: null }]))));
+
+  // Round 24
+  { const row = head('Round 24 · TO TOP with the Karoo’s own icons', 'The big TO TOP stays. Before each number the Karoo’s own glyph (from its ride app: ic_distance and ic_elevation) in its field-icon green, the unit after it. B adds a + to the height, so it reads as metres still to climb. The climb icon everywhere is now the Karoo’s ClimbER mountain (ic_climber).');
+    row.append(nativeBarGrid()); }
+  section('Round 24 · on your page', 'Bar A on the nearly-half size, the Karoo’s ClimbER mountain on every size. Light and dark.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'C2') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+
+  // Round 23: borrowing the Karoo's climb-page tiles
+  { const row = head('Round 23 · now (bar with units)', 'For comparison: the build preview as it is.'); row.append(optCanvas('units', 'plain', false), optCanvas('units', 'plain', true)); }
+  { const row = head('A · Karoo icons in the bar', 'The Karoo’s own distance and elevation icons, in its mint green, before each number: ⇄ 2.6 KM, ramp 196 M. Same bar, the icons now say what the numbers are together with the units.'); row.append(optCanvas('nativeIcons', 'plain', false), optCanvas('nativeIcons', 'plain', true)); }
+  { const row = head('B · Two Karoo fields in the bar', 'The bar becomes the Karoo’s climb-page pair: mint icon, DIST TO TOP 2.6 | ELEV TO TOP 196. The labels say it in the Karoo’s own words; TO TOP goes.'); row.append(optCanvas('split', 'plain', false), optCanvas('split', 'plain', true)); }
+  { const row = head('C · B + the PR row as Karoo tiles', 'Also STRAVA PR, VS PR and ETA TO TOP as the climb page’s navy tiles: blue edge, icon and label at the top, the number under it.'); row.append(optCanvas('split', 'tiles', false), optCanvas('split', 'tiles', true)); }
+
+  // Build preview (rounds 19–22 + Karoo type): every state, as it will be built
+  const pageA = (dark, wideFn, smallFn, halfFn) => (ctx) => pageTiles(ctx, dark, [
+    { x: 1, y: 60, w: 478, h: 212, fn: wideFn }, { x: 1, y: 278, w: 238, h: 168, fn: smallFn },
+    { x: 241, y: 278, w: 238, h: 168, fn: null }, { x: 1, y: 452, w: 478, h: 300, fn: halfFn }]);
+  const big = (dark, fn) => (ctx) => pageTiles(ctx, dark, [
+    { x: 1, y: 60, w: 478, h: 455, fn }, { x: 1, y: 521, w: 238, h: 168, fn: null }, { x: 241, y: 521, w: 238, h: 168, fn: null }]);
+  const at = (km, draw) => (ctx) => { NOW_KM = km; draw(ctx); NOW_KM = 3.8; };
+  section('Build preview · on the climb, your page', 'Everything that will be built: the Karoo’s own number font and header rules, its ClimbER mountain, PR rosette and names (PR, TIME TO PR, TIME TO TOP), TO TOP bar with its icons and units, no bracket and no lines on the sizes without the strip. Two tiles, one tile, nearly half; 3.8 km up, 18 s behind your PR.',
+    [false, true].map(dark => pageA(dark, (c, r) => wideV(c, r, dark, 'C2'), (c, r) => smallN(c, r, dark, { show: 'top' }), (c, r) => halfNA(c, r, dark, {}))));
+  section('Build preview · on the climb, biggest size', 'Whole climb, the 500 M bracket, the next 500 m as five sliding boxes on navy, STRAVA PR / VS PR / ETA TO TOP without dividers.',
+    [false, true].map(dark => big(dark, (c, r) => halfNA(c, r, dark, {}))));
+  section('Build preview · 100 m to the top', 'The bracket says 100 M; SUMMIT REACHED has slid in behind the last box.',
+    [false, true].map(dark => at(CLIMB.lengthKm - 0.1, big(dark, (c, r) => halfNA(c, r, dark, {})))));
+  section('Build preview · on top', 'No bracket; SUMMIT REACHED rests in the middle of the strip.',
+    [false, true].map(dark => at(CLIMB.lengthKm, big(dark, (c, r) => halfNA(c, r, dark, {})))));
+  section('Build preview · before the climb', 'NEXT CLIMB and how far to its start; the whole climb in its colours.',
+    [false, true].map(dark => pageA(dark, (c, r) => wideV(c, r, dark, 'C2', { idle: true }), (c, r) => smallN(c, r, dark, { idle: true }), (c, r) => halfNA(c, r, dark, { idle: true }))));
+  section('Build preview · no route', 'Round 29: every size as the Karoo’s own empty field, the half screen too: the header stays (ClimbER mountain + TIME TO TOP), No Route in the value’s place by the shared rule. No navy box.',
+    [false, true].map(dark => pageA(dark, (c, r) => emptyNativeWide(c, r, dark, 'noRoute'), (c, r) => emptyNativeSmall(c, r, dark, 'noRoute'), (c, r) => emptyNativeWide(c, r, dark, 'noRoute'))));
+  section('Build preview · after the last climb', 'All 3 Climbs Done (one tile: 3/3 Climbs Done), by the same rule.',
+    [false, true].map(dark => pageA(dark, (c, r) => emptyNativeWide(c, r, dark, 'done'), (c, r) => emptyNativeSmall(c, r, dark, 'done'), (c, r) => emptyNativeWide(c, r, dark, 'done'))));
+
+  // Round 21
+  section('Round 21: no climb right now', 'No blue TO TOP bar when there’s no climb: the empty state fills the field. After the last climb it says “3/3 climbs done”. Light and dark.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyWide(c, r, dark, 'done') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptySmall(c, r, dark, 'done') },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyHalf(c, r, dark, 'done') },
+    ])));
+  section('Round 21: no route', null,
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyWide(c, r, dark, 'noRoute') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptySmall(c, r, dark, 'noRoute') },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyHalf(c, r, dark, 'noRoute') },
+    ])));
+
+  // Round 20
+  { const row = head('TO TOP bar: say what the numbers are', 'A: the units in the Karoo’s label capitals right after each number (2.6 KM, 196 M UP). B: in words (2.6 km to go · 196 m to climb). The icons from round 19 for comparison.');
+    row.append(barGrid()); }
+  section('Round 20: biggest size', 'Bar A; no white line above the strip and no light-blue lines between STRAVA PR, VS PR and ETA TO TOP; numbers in the Karoo’s own font (Relative) where this preview has it.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 455, fn: (c, r) => halfNA(c, r, dark, {}) },
+      { x: 1, y: 521, w: 238, h: 168, fn: null }, { x: 241, y: 521, w: 238, h: 168, fn: null },
+    ])));
+  section('Round 20: nearly half', 'No strip here, so no 500 M bracket either.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'C2') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+  section('Round 20: after the last climb', 'The hint bigger (21 px), climbs done 14 px off the bottom like the Karoo’s values.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyWide(c, r, dark, 'done') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptySmall(c, r, dark, 'done') },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyHalf(c, r, dark, 'done') },
+    ])));
+
+  // Round 19: summit + empty states
+  { const row = head('Near the top: navy strip, then SUMMIT REACHED', 'The strip behind the boxes is navy now (no more white as they run out). Right behind the last 100 m comes a little flag and SUMMIT REACHED; it slides in with the boxes and comes to rest in the middle when you’re on top. Biggest size, 600, 300, 100 and 0 m to go.');
+    row.append(summitRow()); }
+  section('Empty: no route', 'No route with climbs loaded. No dashes or empty numbers: the climb icon, “No climbs yet” and the hint to load a route. Two tiles, one tile, nearly half; light and dark.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyWide(c, r, dark, 'noRoute') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptySmall(c, r, dark, 'noRoute') },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyHalf(c, r, dark, 'noRoute') },
+    ])));
+  section('Empty: after the last climb', 'Past the last climb of the route: the summit flag, “That was the last climb” and how many you did (3/3).',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => emptyWide(c, r, dark, 'done') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => emptySmall(c, r, dark, 'done') },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => emptyHalf(c, r, dark, 'done') },
+    ])));
+
+  // Round 18
+  section('Round 18: the 500 M bracket', '28 px label; the bracket as thick as the white line under you, its left end coming down to just above the ring, the right end to just above the road at 500 m; no white edge along the road. Biggest size, light and dark.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 455, fn: (c, r) => halfNA(c, r, dark, {}) },
+      { x: 1, y: 521, w: 238, h: 168, fn: null }, { x: 241, y: 521, w: 238, h: 168, fn: null },
+    ])));
+  section('Round 18: nearly half', null,
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'C2') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+
+  // Round 17: bigger 500 M label
+  { const row = head('500 M label: 24 or 28 px', 'The label as built (20 px), then 24 and 28 px, at the biggest size (left) and nearly half (right). The bracket stays as it is; the label sits 6 px above it.');
+    row.append(labelGrid(false)); }
+
+  // Round 15: D without dimming
+  section('Round 15: your page', 'The next 500 m: a white edge along the road and the 500 M bracket over it; the rest of the climb keeps its full colours. Whole climb on the half sizes, the next 500 m strip on the biggest. Light and dark.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'C2') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+  section('Round 15: the biggest size', null,
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 455, fn: (c, r) => halfNA(c, r, dark, {}) },
+      { x: 1, y: 521, w: 238, h: 168, fn: null }, { x: 241, y: 521, w: 238, h: 168, fn: null },
+    ])));
+
+  // Round 14: next 500 m markers
+  { const row = head('Next 500 m: four markers', 'The whole climb leaves the 500 m only 25–50 px wide, so the lit box gets lost. A: a white dimension line over those 500 m. B: the 500 m at full colour with a white edge, the road beyond dimmed. C: a second thin white line where the 500 m end (the Karoo’s own way, as in your ClimbER photo). D: B and A together. Left the biggest size, right nearly half.');
+    row.append(markGrid()); }
+  section('D on the device', 'Spotlight + bracket at the biggest size, light and dark.',
+    [false, true].map(dark => ctx => { MARK = 'spotBracket'; pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 455, fn: (c, r) => halfNA(c, r, dark, {}) },
+      { x: 1, y: 521, w: 238, h: 168, fn: null }, { x: 241, y: 521, w: 238, h: 168, fn: null },
+    ]); MARK = 'edgeBracket'; }));
+
+  // Round 13: whole climb, strip = next 500 m
+  section('Biggest size: whole climb, the next 500 m below', 'Like the Karoo: the graph always shows the whole climb (100 m columns). The strip under it is the next 500 m: five big 100 m boxes in their grade colours, starting where you are, matching the lit 500 m in the graph.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 455, fn: (c, r) => halfNA(c, r, dark, {}) },
+      { x: 1, y: 521, w: 238, h: 168, fn: null }, { x: 241, y: 521, w: 238, h: 168, fn: null },
+    ])));
+  { const row = head('The strip moves as you climb', 'Three moments 40 m apart: the boxes slide left; the 100 m you’re in leaves on the left (its number goes once less than 60 % shows) and the next one comes in on the right.');
+    row.append(slideRow(false)); }
+  section('Nearly half: the whole climb too', 'No strip at this size; the graph shows the whole climb with the lit 500 m.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'C2') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+
+  // Round 12: C with VS PR under the time
+  section('Two tiles · C, VS PR under the time', 'The name on the graph’s sky; on the right ETA TO TOP at the top, the time under it, and VS PR bottom right on the graph’s bottom edge.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'C2') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+  { const row = head('At 212 and 168 px', null);
+    for (const dark of [false, true]) {
+      const S = 2, W = 478, hs = [212, 168], gap = 20, H = hs[0] + hs[1] + gap;
+      const c = document.createElement('canvas'); c.width = W * S; c.height = H * S; c.style.width = '390px';
+      const ctx = c.getContext('2d'); ctx.scale(S, S); let y = 0;
+      for (const h of hs) {
+        const r = { x: 0, y, w: W, h };
+        ctx.save(); ctx.beginPath(); ctx.roundRect(0.5, y + 0.5, W - 1, h - 1, 14); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+        wideV(ctx, r, dark, 'C2'); ctx.restore();
+        ctx.beginPath(); ctx.roundRect(0.5, y + 0.5, W - 1, h - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+        y += h + gap;
+      }
+      row.append(c);
+    }
+  }
+
+  // Round 11: two tiles, typography and alignment
+  section('Two tiles · A · Karoo header', 'The climb name in the Karoo’s label capitals (COL DU LAC), the same size as ETA TO TOP. On the right: VS PR on the graph’s top edge, the time on its bottom edge (bottom aligned), both 9 px from the edge.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'A') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+  section('Two tiles · B · Big name', 'The climb name big (40 px capitals) as the title; ETA TO TOP smaller and grey, so the name leads. Same right column: VS PR on the graph’s top edge, the time on its bottom edge.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'B') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+  section('Two tiles · C · Name on the graph', 'Like the half screen: the name sits on the graph’s sky, the graph uses the full height. The right side is a Karoo field: ETA TO TOP at the top, VS PR under it, the time on the bottom edge.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideV(c, r, dark, 'C') },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+  { const row = head('Side by side', 'A, B, C at 478×212 (your page) and 478×168 (a 4-row page). Light and dark.'); row.append(wideGrid(false), wideGrid(true)); }
+
+  // Round 10: C, hidden on one tile and two tiles
+  section('Round 10: your page', 'NEXT 500 M as C: climb blue, stopping above the road, rounded top, label on it. Only on nearly half and up; one tile and two tiles show no band. Light and dark.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideN(c, r, dark, { show: 'both' }) },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+  section('Round 10: the biggest size', null,
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 455, fn: (c, r) => halfNA(c, r, dark, {}) },
+      { x: 1, y: 521, w: 238, h: 168, fn: null }, { x: 241, y: 521, w: 238, h: 168, fn: null },
+    ])));
+
+  // Round 9: the NEXT 500 M band
+  { const row = head('NEXT 500 M: four looks', 'Left: the biggest size (478×455, your Mountaineer page). Right: nearly half (478×300). Tonal: a dark step up from the navy (#0A3A66), so the band reads as a quiet scale mark and the coloured road stays the brightest thing. Stops above the road: the band rises a little above the highest point in those 500 m (at least 26 px), rounded at the top, label on it.');
+    row.append(bandGrid(false)); }
+  // Round 8: the four sizes, bars like the Karoo, NEXT 500 M, strip only on the biggest
+  section('Your BETA page', 'The sizes the Karoo gave Tiny Climb on your page: two tiles (478×212), one tile (238×168) and nearly half (478×300). Columns now follow the road: each 100 m is a full-height colour cut out by the smooth profile, exactly how the Karoo draws its own climb graph. Nearly half: no grade strip, the graph gets the room.',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 212, fn: (c, r) => wideN(c, r, dark, { show: 'both' }) },
+      { x: 1, y: 278, w: 238, h: 168, fn: (c, r) => smallN(c, r, dark, { show: 'top' }) },
+      { x: 241, y: 278, w: 238, h: 168, fn: null },
+      { x: 1, y: 452, w: 478, h: 300, fn: (c, r) => halfNA(c, r, dark, {}) },
+    ])));
+  section('The biggest size: half screen and up', 'Only here the grade strip (each 100 m’s grade) goes under the graph, like the Karoo’s ClimbER drawer. The lit 500 m says NEXT 500 M wherever it’s wide enough. Here at 478×455 (a page with three fields, like your Mountaineer page).',
+    [false, true].map(dark => ctx => pageTiles(ctx, dark, [
+      { x: 1, y: 60, w: 478, h: 455, fn: (c, r) => halfNA(c, r, dark, {}) },
+      { x: 1, y: 521, w: 238, h: 168, fn: null }, { x: 241, y: 521, w: 238, h: 168, fn: null },
+    ])));
+
+  // Round 6: half screen = A (Climb drawer)
+  section('Half screen', 'The Karoo’s TO TOP bar on top, its climb graph zoomed to the next kilometre with the grade strip, then Strava PR, VS PR and ETA to top on navy. Behind your PR: red.',
+    pair(dark => [{ half: (c, r) => halfNA(c, r, dark, {}) }, 's', 's']));
+  section('Half screen · ahead of PR', 'Ahead of your PR: green.',
+    pair(dark => [{ half: (c, r) => halfNA(c, r, dark, { ahead: true }) }, 's', 's']));
+  section('Half screen · fewer lines', 'Settings › Half screen shows, everything but ETA to top switched off (or no Strava): the numbers that are left get the room. Left: ETA only. Right: Gap to PR and ETA, name off.',
+    [ctx => page(ctx, false, [{ half: (c, r) => halfNA(c, r, false, { items: { pr: false, gap: false } }) }, 's', 's']),
+     ctx => page(ctx, false, [{ half: (c, r) => halfNA(c, r, false, { items: { pr: false, name: false } }) }, 's', 's'])]);
+  section('Half screen · not on a climb', 'Before the climb (on a route): NEXT CLIMB and how far to its start in the bar, the whole climb in its colours, then your PR, its length and height.',
+    pair(dark => [{ half: (c, r) => halfNA(c, r, dark, { idle: true }) }, 's', 's']));
+  section('One tile', 'ETA to top counts down, distance to top counts down in km, gap to PR in red when behind (green when ahead) with the Strava symbol next to the mountain. The Karoo’s climb graph in small: 400 m bars in the Karoo’s grade colours, climbed part hatched, ring where you are, next 500 m lit.',
+    pair(dark => ['s', [(c, r) => smallN(c, r, dark, { show: 'top' }), (c, r) => smallN(c, r, dark, { show: 'pr' })], [(c, r) => smallN(c, r, dark, { show: 'dist' }), null], 's']));
+  { const row = head('PR symbol', 'Next to the mountain wherever a PR shows. The rider picks it in Settings: PR medal (default) or PR badge.');
+    row.append(stravaGrid(false), stravaGrid(true)); }
+  section('Two tiles', 'Climb name in the header, the Karoo’s graph with 200 m bars. ETA to top big with distance and height left under it, or distance to top big with height left under it.',
+    pair(dark => ['s', (c, r) => wideN(c, r, dark, { show: 'top' }), (c, r) => wideN(c, r, dark, { show: 'dist' }), 's']));
+  section('Two tiles · Both', 'ETA to top big, gap to PR under it, Strava symbol next to the mountain.',
+    pair(dark => ['s', (c, r) => wideN(c, r, dark, { show: 'both' }), 's', 's']));
+  section('Not on a climb', 'Before a climb (on a route): the next climb, how far until it starts, the whole climb in its colours.',
+    pair(dark => [[(c, r) => smallN(c, r, dark, { idle: true }), null], (c, r) => wideN(c, r, dark, { idle: true }), 's', 's']));
+  { const row = head('Every tile', 'One tile: ETA to top, behind PR, ahead of PR, distance to top, next climb. Two tiles: ETA to top, distance to top, both, ahead of PR, next climb.'); row.append(tiles(false), tiles(true)); }
+  section('Settings', 'One tile and two tiles each pick what they show; the half screen has a switch per line; at the end the PR symbol (medal or badge) and Strava. The Example follows every change.',
+    [settings1, settings2, ctx => settings3(ctx, 'medal'), ctx => settings3(ctx, 'badge')]);
+})();
+</script>

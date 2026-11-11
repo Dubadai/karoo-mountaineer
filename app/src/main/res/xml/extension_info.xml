@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExtensionInfo
+    displayName="@string/extension_name"
+    icon="@drawable/ic_app"
+    id="mountaineer"
+    scansDevices="false">
+
+    <!-- Any size: one tile, two tiles, half screen (and bigger) -->
+    <DataType
+        description="@string/field_description"
+        displayName="@string/field_name"
+        graphical="true"
+        icon="@drawable/ic_app"
+        typeId="tiny-climb" />
+</ExtensionInfo>

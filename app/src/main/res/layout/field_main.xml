@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Any field size. The whole field is one bitmap drawn by ClimbRenderer. No background anywhere:
+     the Karoo draws the tile (rounded corners, border, white or black) and a solid colour here
+     would cover its corners. No click handler: a clickable field swallows the touch, so the
+     Karoo's long-press (change field) never starts. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/field"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY" />
+</FrameLayout>

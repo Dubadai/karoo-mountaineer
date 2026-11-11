@@ -1,0 +1,66 @@
+# One source for the README (top block) and the Reddit post: edit here, then run setup/docs.sh.
+# headline: "path | alt text", light first, then dark. Text in our plain voice; no real names.
+name: Mountaineer
+apk: mountaineer.apk
+intro: |
+  A climb field for the Hammerhead Karoo 3: where you are on the climb, drawn like the Karoo's own
+  climb graph (its grade colours, the climbed part hatched), with the time and distance to the top
+  and the time to your Strava PR. On the Karoo the app is **DDB Mountaineer** and the field
+  **Mountaineer**.
+headline:
+  - docs/images/mountaineer-light.gif | Mountaineer on three Karoo 3s riding up Sa Calobra (full page, half page, one tile): from DIST TO CLIMB 1.5 KM to the SUMMIT summary, time to top counting down and the gap to the PR going from behind to 9 s ahead
+  - docs/images/mountaineer-dark.jpg | The same in dark mode, at one moment of the ride
+  - docs/images/mountaineer-features.jpg | What goes into time to top: 20:16 based on power, adapts to wind conditions, adapts over time (data always stays on the Karoo), and a custom bike weight (6.4 kg) to improve the calculation
+features:
+  - **One tile:** time to top, distance to top or time vs PR, over a small climb graph.
+  - **Two tiles:** the graph with the climb's name (or its number, 3 of 30), and time to top,
+      distance to top, time to PR, or both (time to top with VS PR under it).
+  - **Half screen and up:** TO TOP with the distance and height still to climb, the climb with
+      the next 500 m as grade boxes on the biggest size, then PR, TIME VS PR and TIME TO TOP.
+  - **Before a climb:** DIST TO CLIMB, and the road from you to the climb's top; from 1 km before
+      it, a close-up at least 2 km wide, so a short climb looks short. Every graph ends at the
+      summit with a checkered flag and a bit of the road after it.
+  - **At the top:** SUMMIT with your time on the climb, your gap to the PR (or average power) and VAM.
+  - **Off route:** the Karoo's way back to the route in red, with its ups and downs.
+  - **No climb to show:** after the last climb, or on a route without climbs, the whole route
+      and DIST TO FINISH. No route loaded: No Route.
+install:
+  - On your phone, open the [latest release](https://github.com/Dubadai/karoo-mountaineer/releases/latest)
+      and share the `mountaineer.apk` link to the **Hammerhead Companion** app (or with a computer:
+      `adb install mountaineer.apk`).
+  - In a ride profile, add **DDB Mountaineer → Mountaineer** to a page: one tile, two tiles or
+      half a page and up.
+  - Open **DDB Mountaineer** from the app list to choose what one tile and two tiles show and which
+      lines the half screen shows. The Example at the top shows the field as you set it. Under
+      **Time to top**, set your bike weight (one for all, or per ride profile), the wind, and
+      **Improve over time**.
+  - Load a route with climbs before the ride. For PR times, turn on Strava Live Segments on the
+      Karoo (Settings › Strava).
+install_note: New versions show up on the Karoo as an update card; tap it, then UPDATE.
+reddit:
+  title: |
+    Mountaineer: see where you are on a climb on your Karoo 3, with time to the top and your PR
+  body: |
+    I love the Karoo's climb graph but wanted it as a data field I can put on any page, with the numbers I actually look at on a climb. So I made Mountaineer.
+
+    It's one field that works at any size. It shows the climb in the Karoo's own colours, with the part you've already done hatched, and tells you how long until the top and how you're doing against your Strava PR.
+
+    - One or two tiles: time to the top, distance to the top or time vs your PR, over a small climb graph
+    - Half a screen and up: the whole climb, the next 500 m grade by grade, distance and elevation left, your PR, your time vs PR and your time to the top
+    - Before a climb it shows how far it is and the road up to its top, then a close-up from 1 km before it
+    - At the top: your time on the climb, your gap to the PR and your VAM
+    - Off route it draws the Karoo's way back to the route in red
+
+    It uses the climbs from the route you load on the Karoo, and your PR from the Karoo's own Strava Live Segments, so there's no extra sign-in. You need a loaded route with climbs.
+
+    Time to the top is based on your power (your 30 s power, or your speed if you ride without a power meter), and there are a few ways it gets more accurate:
+
+    - Enter your bike's weight, one for all bikes or one per ride profile (8 kg if you leave it). Your own weight comes from your Karoo rider profile
+    - It adapts to the wind on each part of the climb, from the Open-Meteo forecast (needs a connection)
+    - With a power meter it checks your real speed while you climb and corrects itself
+    - Turn on Improve over time and it adapts to how you ride, climb after climb. The data always stays on your Karoo
+  get: |
+    Free and open source. Download `mountaineer.apk` from the latest release, sideload it, and add DDB Mountaineer to a ride page.
+  closing: Let me know how it works on your climbs.
+versions:
+

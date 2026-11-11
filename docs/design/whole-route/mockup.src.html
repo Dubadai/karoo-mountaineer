@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whole Route View</title>
+<style>
+@font-face { font-family: Plex; src: url(__FONT_REG__); font-weight: 400; }
+@font-face { font-family: Plex; src: url(__FONT_MED__); font-weight: 500; }
+@font-face { font-family: Plex; src: url(__FONT_SEMI__); font-weight: 600; }
+@font-face { font-family: Plex; src: url(__FONT_BOLD__); font-weight: 700; }
+:root { --bg:#f6f5f2; --fg:#1d1d1b; --muted:#6b6a66; --card:#ffffff; --line:#dddbd5; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#161615; --fg:#ecebe7; --muted:#a3a29c; --card:#1f1f1e; --line:#33322f; } }
+:root[data-theme="dark"] { --bg:#161615; --fg:#ecebe7; --muted:#a3a29c; --card:#1f1f1e; --line:#33322f; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 -apple-system, system-ui, sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 28px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 40px 0 6px; }
+p, li { color: var(--muted); max-width: 80ch; }
+.grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px 14px; align-items: start; margin-top: 14px; }
+.cell h3 { font-size: 14px; margin: 6px 0 0; font-weight: 600; } .cell .sub { font-size: 13px; color: var(--muted); margin: 0; }
+.pair { display:flex; flex-direction:column; gap: 6px; }
+canvas, img.tile { display:block; max-width:100%; height:auto; }
+.wide { grid-column: span 2; } @media (max-width: 620px) { .wide { grid-column: auto; } }
+.timeline { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 14px; overflow-x: auto; }
+.timeline canvas { min-width: 640px; width: 100%; }
+.ask { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; margin-top: 28px; }
+.ask li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Whole route, close-up near a climb</h1>
+<p>Round 48. Today, before a climb Mountaineer shows only the road up to it and the climb, so on today's ride a 510 m climb filled almost the whole tile.
+Proposal: the <b>whole route</b> with the Karoo's climbs coloured on it is the standard view, and it zooms into a climb only <b>1 km before</b> it starts.
+The close-up is always at least <b>2 km</b> wide, so a short climb looks short. A long climb (Sa Calobra) looks just as it does today.
+The pictures use a route like today's (28.8 km, three climbs, the last one 510 m at 4.7 %). Ridden road is a quiet tint on the whole route; on a climb it's hatched, as today. Numbers are drawn in Plex here; the app uses the Karoo's own font.</p>
+
+<div class="timeline"><canvas id="timeline" width="1200" height="150"></canvas></div>
+
+<h2>Text (round 48b)</h2>
+<p>The grey line under the number is smaller (18 px, was 21) and darker (#333; at night lighter, #D0D0D0), since it was hard to read on the ride.
+A number sits 2 px from its unit (was 4–6 px), and in the grey line and the half screen's columns a thin space keeps <i>510&#8201;m</i> together.
+<b>Metres under 1 km</b> for a climb's length and what's left in the grey line (510 m, 310 m), kilometres with one decimal from 1 km (1.4 km).
+The big countdowns (STARTS IN, DIST TO TOP) stay in km with two decimals under 1 km (0.80 km), like the Karoo's own climb fields.</p>
+
+<h2>1 · Far from a climb: the whole route</h2>
+<p>4.3 km before climb 3. Your dot on the route; a flag on the next climb's start. The text stays as today (STARTS IN, the next climb's length and gradient).</p>
+<div class="grid" id="far"></div>
+
+<h2>The smallest tiles: whole route, or only up to the next climb?</h2>
+<p>At 236 px a 28.8 km route is about 8 px per km. <b>A</b> keeps the whole route like the other sizes. <b>B</b> shows only from you to the top of the next climb (4.9 km here), so the climb itself is easier to read.</p>
+<div class="grid" id="smallAB"></div>
+
+<h2>2 · 1 km before the climb: the close-up starts</h2>
+<p>0.8 km before climb 3. The close-up is 2 km wide: the road up to it, the climb, and the road after it, so the 510 m climb takes about a quarter of the graph.</p>
+<div class="grid" id="near"></div>
+
+<h2>3 · On the climb</h2>
+<p>200 m up climb 3. The same 2 km close-up, your dot on the climb. Back to the whole route a minute after the top (the summit view stays as today).</p>
+<div class="grid" id="on"></div>
+
+<h2>Long climbs stay as today</h2>
+<p>A climb longer than 2 km fills the close-up as it does now (today's build, Sa Calobra, 9.4 km).</p>
+<div class="grid" id="long"></div>
+
+<div class="ask">
+<b>To pick</b>
+<ul>
+<li>Close-up from <b>1 km</b> before a climb? (or 500 m / 2 km)</li>
+<li>Close-up at least <b>2 km</b> wide?</li>
+<li>Smallest tiles: <b>A</b> whole route or <b>B</b> only up to the next climb?</li>
+</ul>
+</div>
+</main>
+<script>
+const IMGS = "__IMGS__";
+const ICONS = "__ICONS__";
+// ---- A route like today's: 28.8 km, three climbs (the Karoo's list) ----------------------
+const TOTAL = 28800, STEP = 50;
+const CLIMBS = [
+  { n: 1, start: 6200, len: 1400, grade: 5.6 },
+  { n: 2, start: 15000, len: 900, grade: 3.9 },
+  { n: 3, start: 25620, len: 510, grade: 4.7 },
+];
+const climbAt = d => CLIMBS.find(c => d >= c.start && d < c.start + c.len);
+const E = [20];
+for (let d = 0; d < TOTAL; d += STEP) {
+  const c = climbAt(d + STEP / 2);
+  const g = c ? c.grade + 1.6 * Math.sin((d - c.start) / 140) : 0.5 * Math.sin(d / 900) + 0.35 * Math.sin(d / 2300);
+  E.push(E[E.length - 1] + g / 100 * STEP);
+}
+const elev = d => { const x = Math.max(0, Math.min(TOTAL, d)) / STEP, i = Math.min(E.length - 2, Math.floor(x)); return E[i] + (x - i) * (E[i + 1] - E[i]); };
+// The Karoo's climb colours by the grade of each 100 m (ride app thresholds)
+const COL = ['#60EEB2', '#00B988', '#FFF500', '#FB8C65', '#FE581F', '#D60404', '#B700A2'];
+const gradeCol = g => COL[g < 2 ? 0 : g < 5 ? 1 : g < 8 ? 2 : g < 11 ? 3 : g < 14 ? 4 : g < 20 ? 5 : 6];
+const colAt = d => { const c = climbAt(d); if (!c) return null; const k = Math.floor((d - c.start) / 100) * 100 + c.start, b = Math.min(c.start + c.len, k + 100); return gradeCol((elev(b) - elev(k)) / Math.max(1, b - k) * 100); };
+
+const NAVY = '#00294B', BAND = '#005297', LABEL = '#A3D5FF', ROAD = '#3D6A93';
+const F = (w, px) => `${w} ${px}px Plex`;
+function txt(c, s, font, col, x, y, align = 'left') { c.font = font; c.fillStyle = col; c.textAlign = align; c.fillText(s, x, y); c.textAlign = 'left'; return c.measureText(s).width; }
+
+// ---- The graph: route [from..to] in box b; ridden road hatched; you; the next climb's flag ----
+function graph(c, b, from, to, o) {
+  const xs = b.w, ds = [], es = [];
+  for (let x = 0; x <= xs; x++) { const d = from + (to - from) * x / xs; ds.push(d); es.push(elev(d)); }
+  const lo = Math.min(...es), hi = Math.max(...es), span = Math.max(hi - lo, o.minRise || 30);
+  const fh = Math.min(22, Math.round(b.h * 0.42));   // the flag stays inside the graph
+  const top = b.y + Math.max(o.headroom || 8, o.flag != null ? fh + 3 : 0), base = b.y + b.h;
+  const yOf = e => base - 11 - (e - lo) / span * (base - 11 - top);   // room for your dot at the lowest point
+  for (let x = 0; x < xs; x++) {
+    // a climb is at least 3 px wide, so short ones still show on a long route
+    const d = ds[x], dpp = (to - from) / xs, cc = colAt(d) || (o.minClimbPx ? [0, -1, 1].map(k => colAt(d + k * dpp)).find(Boolean) : null);
+    const col = cc || o.road, y0 = Math.round(yOf(es[x])), X = b.x + x;
+    if (d < o.you && o.hatch) { for (let y = y0; y < base; y++) if ((X + y) % 7 < 2) { c.fillStyle = col; c.fillRect(X, y, 1, 1); } }
+    else if (d < o.you) { c.globalAlpha = cc ? 0.4 : 1; c.fillStyle = cc ? col : o.ridden; c.fillRect(X, y0, 1, base - y0); c.globalAlpha = 1; }
+    else { c.fillStyle = col; c.fillRect(X, y0, 1, base - y0); }
+  }
+  const xOf = d => b.x + (d - from) / (to - from) * xs;
+  if (o.flag != null) {   // the next climb's start: a solid pole with a flag, in the ink
+    const fx = Math.round(xOf(o.flag)), fy = yOf(elev(o.flag));
+    const px = fx - 3;   // the pole just before the start, so it never hides a short climb
+    c.fillStyle = o.ink; c.fillRect(px - 1, fy - fh, 2.5, base - fy + fh);
+    c.beginPath(); c.moveTo(px + 1.5, fy - fh); c.lineTo(px + 1.5 + fh * 0.57, fy - fh * 0.75); c.lineTo(px + 1.5, fy - fh * 0.5); c.fill();
+  }
+  if (o.numbers) CLIMBS.forEach(cl => { const mid = cl.start + cl.len / 2; if (mid < from || mid > to) return;
+    const top2 = Math.min(...[0, .25, .5, .75, 1].map(f => yOf(elev(cl.start + cl.len * f))));
+    txt(c, String(cl.n), F(500, 18), cl.start < o.you ? o.muted : o.ink, xOf(mid), top2 - 8, 'center'); });
+  // you: a ring on the road with a stem down (as today)
+  const yx = xOf(o.you), yy = yOf(elev(o.you));
+  c.fillStyle = o.ink; c.fillRect(yx - 1.2, yy, 2.4, base - yy);
+  c.beginPath(); c.arc(yx, yy, 7, 0, 7); c.fillStyle = o.ring; c.fill(); c.lineWidth = 3; c.strokeStyle = o.ink; c.stroke();
+}
+
+// ---- Tiles (the code's sizes) ------------------------------------------------------------
+const SIZES = { small: [236, 141], quarter: [238, 168], row: [478, 141], half: [478, 336] };
+function tile(w, h, dark, draw) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const c = cv.getContext('2d');
+  c.save(); c.beginPath(); c.roundRect(0.5, 0.5, w - 1, h - 1, 14); c.fillStyle = dark ? '#000' : '#FFF'; c.fill(); c.clip();
+  draw(c); c.restore();
+  c.beginPath(); c.roundRect(0.5, 0.5, w - 1, h - 1, 14); c.strokeStyle = '#7D7D7D'; c.lineWidth = 1; c.stroke();
+  cv.style.width = w + 'px'; return cv;
+}
+function mountain(c, x, y, col) { c.strokeStyle = col; c.lineWidth = 3.2; c.lineJoin = 'round'; c.beginPath(); c.moveTo(x, y); c.lineTo(x + 8, y - 15); c.lineTo(x + 13, y - 7); c.lineTo(x + 17, y - 12); c.lineTo(x + 25, y); c.stroke(); }
+
+// A view: window [from, to] of the route, you, the next climb's flag, and the texts
+function view(st, sizeKey, dark) {
+  const [w, h] = SIZES[sizeKey], ink = dark ? '#FFF' : '#000', muted = dark ? '#B4B2A9' : '#6F6F6F', sub = dark ? '#D0D0D0' : '#333333';   // round 48: the grey line darker (lighter at night), it was hard to read on the ride
+  return tile(w, h, dark, c => {
+    const g = { ink, ring: dark ? '#000' : '#FFF', muted, road: ROAD, ridden: dark ? '#22384C' : '#C3D0DB', you: st.you, flag: st.flag, hatch: st.hatch, minClimbPx: st.to - st.from > 8000 };
+    if (sizeKey === 'small' || sizeKey === 'quarter') {
+      const q = sizeKey === 'quarter', gy = q ? 118 : 98;
+      mountain(c, 13, q ? 50 : 44, ink);
+      txt(c, st.head, F(500, q ? 23 : 20), ink, w - 9, q ? 50 : 42, 'right');
+      const uw = txt(c, st.unit, F(400, 22), ink, w - 9, q ? 103 : 88, 'right');
+      txt(c, st.value, F(400, q ? 54 : 46), ink, w - 11 - uw, q ? 103 : 88, 'right');   // 2 px to the unit
+      graph(c, { x: 0, y: gy, w, h: h - gy }, st.from, st.to, Object.assign(g, { headroom: 6, minRise: st.minRise }));
+    } else if (sizeKey === 'row') {
+      c.fillStyle = NAVY; c.fillRect(0, 0, 278, h);
+      mountain(c, 12, 30, LABEL); txt(c, st.name, F(500, 20), '#FFF', 46, 30);
+      graph(c, { x: 0, y: 46, w: 278, h: h - 46 }, st.from, st.to, Object.assign(g, { ink: '#FFF', ring: NAVY, ridden: '#1B4468', headroom: 14, minRise: st.minRise }));
+      txt(c, st.head, F(500, 23), ink, w - 9, 30, 'right');
+      const uw = txt(c, st.unit, F(400, 22), ink, w - 9, 92, 'right');
+      txt(c, st.value, F(400, 58), ink, w - 11 - uw, 92, 'right');
+      txt(c, st.sub, F(500, 18), sub, w - 9, 127, 'right');   // round 48: 18 px (was 21), darker
+    } else {
+      c.fillStyle = NAVY; c.fillRect(0, 0, w, h); c.fillStyle = BAND; c.fillRect(0, 0, w, 56);
+      txt(c, st.head, F(500, 26), '#FFF', 12, 38); txt(c, st.bandValue, F(500, 26), '#FFF', w - 12, 38, 'right');
+      mountain(c, 12, 86, LABEL); txt(c, st.name, F(500, 21), '#FFF', 46, 86);
+      const gb = { x: 0, y: 100, w, h: (st.boxes ? 196 : 246) - 100 };
+      graph(c, gb, st.from, st.to, Object.assign(g, { ink: '#FFF', ring: NAVY, ridden: '#1B4468', headroom: 26, numbers: st.numbers, muted: '#7FA6C9', minRise: st.minRise }));
+      if (st.boxes) st.boxes.forEach((v, i) => { const bw = w / 5, x = i * bw; c.fillStyle = gradeCol(v); c.fillRect(x + 1, 197, bw - 2, 48);
+        txt(c, v.toFixed(1), F(400, 32), v >= 11 ? '#FFF' : '#000', x + bw / 2, 233, 'center'); });
+      st.cols.forEach(([l, v, col], i) => { const R = 12 + (w - 24) * (i + 1) / 3 - (i < 2 ? 14 : 0);
+        txt(c, l, F(500, 20), LABEL, R, 276, 'right'); txt(c, v, F(400, 40), col || '#FFF', R, 320, 'right'); });
+    }
+  });
+}
+
+// ---- The states --------------------------------------------------------------------------
+const C3 = CLIMBS[2], C3END = C3.start + C3.len;
+// The close-up: at least 2 km; the climb a bit right of the middle; you always in view
+function closeup(c, you) { const span = Math.max(2000, c.len * 1.1), slack = span - c.len; let from = c.start - slack * 0.6; if (you < from + span * 0.05) from = you - span * 0.05; return [from, from + span]; }
+const nextTexts = { head: 'STARTS IN', unit: 'km', sub: '510\u2009m · 4.7%', name: 'Climb 3 of 3', cols: [['PR', '–'], ['LENGTH', '510\u2009m'], ['CLIMB', '23\u2009m']] };
+const FAR = Object.assign({}, nextTexts, { you: 21300, flag: C3.start, from: 0, to: TOTAL, value: '4.3', bandValue: '4.3 KM', numbers: true, minRise: 40 });
+const [nf, nt] = closeup(C3, C3.start - 800);
+const NEAR = Object.assign({}, nextTexts, { you: C3.start - 800, flag: C3.start, from: nf, to: nt, value: '0.80', bandValue: '0.80 KM', minRise: 40 });
+const [of, ot] = closeup(C3, C3.start + 200);
+const ON = { hatch: true, you: C3.start + 200, flag: null, from: of, to: ot, minRise: 40, head: 'TIME TO TOP', value: '1:05', unit: '', sub: '310\u2009m · +\u200915\u2009m',
+  name: 'Climb 3 of 3', bandValue: '', boxes: [4.2, 5.9, 4.4], cols: [['PR', '–'], ['TIME VS PR', '–'], ['TIME TO TOP', '1:05']] };
+ON.head2 = 'TO TOP';
+const SMALL_B = Object.assign({}, FAR, { from: 21300 - 260, to: C3END + 150, numbers: false, minRise: 30 });
+
+function cell(parent, title, sub, make, cls = '') {
+  const d = document.createElement('div'); d.className = 'cell ' + cls;
+  const p = document.createElement('div'); p.className = 'pair'; p.append(make(false), make(true)); d.append(p);
+  d.insertAdjacentHTML('beforeend', `<h3>${title}</h3>` + (sub ? `<p class="sub">${sub}</p>` : '')); parent.append(d);
+}
+function pic(name) { const i = document.createElement('img'); i.className = 'tile'; i.src = IMGS[name]; i.style.width = '478px'; return i; }
+
+(async () => {
+  await Promise.all([400, 500, 600].map(w => document.fonts.load(`${w} 20px Plex`)));
+  const $ = id => document.getElementById(id);
+  cell($('far'), 'One tile', 'whole route', d => view(FAR, 'quarter', d));
+  cell($('far'), 'Two tiles', 'whole route in the graph half', d => view(FAR, 'row', d), 'wide');
+  cell($('far'), 'Half screen', 'climb numbers over the climbs; done ones dimmed', d => view(FAR, 'half', d), 'wide');
+  cell($('smallAB'), 'A · whole route', 'smallest tile (on a map page)', d => view(FAR, 'small', d));
+  cell($('smallAB'), 'B · up to the next climb', 'you → top of climb 3', d => view(SMALL_B, 'small', d));
+  cell($('near'), 'One tile', '', d => view(NEAR, 'quarter', d));
+  cell($('near'), 'Two tiles', '', d => view(NEAR, 'row', d), 'wide');
+  cell($('near'), 'Half screen', '', d => view(NEAR, 'half', d), 'wide');
+  // On the climb: the half keeps today's TO TOP band (distance and height left)
+  const onHalf = Object.assign({}, ON, { head: 'TO TOP', bandValue: '0.31 KM  + 15 M' });
+  cell($('on'), 'One tile', '', d => view(ON, 'quarter', d));
+  cell($('on'), 'Two tiles', '', d => view(ON, 'row', d), 'wide');
+  cell($('on'), 'Half screen', 'grade boxes for what’s left (3 × 100 m)', d => view(onHalf, 'half', d), 'wide');
+  cell($('long'), 'One tile', 'today', d => { const i = pic(`today-eta-quarter-${d ? 'dark' : 'light'}`); i.style.width = '238px'; return i; });
+  cell($('long'), 'Two tiles', 'today', d => pic(`today-eta-row-${d ? 'dark' : 'light'}`), 'wide');
+  cell($('long'), 'Half screen', 'today', d => pic(`today-eta-half-${d ? 'dark' : 'light'}`), 'wide');
+  drawTimeline($('timeline'));
+})();
+
+// ---- When it switches: the route as a line, with the close-up stretches marked ----------------
+function drawTimeline(cv) {
+  const c = cv.getContext('2d'), dark = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light';
+  const ink = dark ? '#ECEBE7' : '#1D1D1B', muted = dark ? '#A3A29C' : '#6B6A66', W = cv.width, x0 = 30, x1 = W - 30, y = 70;
+  const X = d => x0 + (x1 - x0) * d / TOTAL;
+  c.font = F(500, 22); c.fillStyle = ink; c.fillText('When the view switches', x0, 28);
+  c.fillStyle = muted; c.fillRect(x0, y - 2, x1 - x0, 4);
+  CLIMBS.forEach(cl => {
+    const a = X(cl.start - 1000), b = X(cl.start + cl.len + 60000 / 3.6 * 0 + 0);
+    c.fillStyle = dark ? 'rgba(98,160,220,.30)' : 'rgba(0,82,151,.16)'; c.fillRect(a, y - 22, X(cl.start + cl.len) - a + 10, 44);
+    c.fillStyle = gradeCol(cl.grade); c.fillRect(X(cl.start), y - 6, Math.max(4, X(cl.start + cl.len) - X(cl.start)), 12);
+    c.font = F(500, 17); c.fillStyle = ink; c.textAlign = 'center'; c.fillText(`climb ${cl.n}`, X(cl.start + cl.len / 2), y - 30); c.textAlign = 'left';
+  });
+  c.font = F(400, 17); c.fillStyle = muted;
+  c.fillText('Whole route', x0, y + 52);
+  const s = X(CLIMBS[0].start - 1000);
+  c.fillText('Close-up: 1 km before the start → a minute after the top', s, y + 52);
+  c.fillText('0 km', x0, y + 76); c.textAlign = 'right'; c.fillText('28.8 km', x1, y + 76); c.textAlign = 'left';
+}
+</script>
+</body>
+</html>

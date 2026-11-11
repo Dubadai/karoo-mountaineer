@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: the field gallery and the shortened-row check (pictures; no test data in the field). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Field gallery: the field at every Karoo size, light and dark (design-assets/tools/field-gallery) -->
+        <activity
+            android:name=".FieldGalleryActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+            <activity android:name=".SquashCheckActivity" android:exported="true" />
+    </application>
+</manifest>

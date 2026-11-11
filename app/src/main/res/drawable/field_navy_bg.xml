@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two tiles in a shortened row (round 51): the climb navy behind the graph and the shrunken text
+     column, so no tile colour shows beside the text. Inside the Karoo's tile border (1.5 px, 14 px
+     corners), like the bitmap's own clip (ClimbRenderer.TILE_*). -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="1.5px">
+    <shape android:shape="rectangle">
+        <solid android:color="#FF00294B" />
+        <corners android:radius="12.5px" />
+    </shape>
+</inset>

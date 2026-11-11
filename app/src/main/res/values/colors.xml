@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The field's colours are in ClimbRenderer (it draws a bitmap). These are for the app icon
+         and the settings screen; values-night/ has the dark versions. -->
+    <color name="text">#FF0B0B0B</color>
+</resources>

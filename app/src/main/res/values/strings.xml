@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DDB Mountaineer</string>
+    <string name="app_short_name">Mountaineer</string>
+    <string name="extension_name">DDB Mountaineer</string>
+    <string name="field_name">Mountaineer</string>
+    <string name="field_description">Where you are on the climb, time and distance to the top, time to your Strava PR</string>
+    <string name="example_one">One tile</string>
+    <string name="example_two">Two tiles</string>
+    <string name="example_half">Half screen</string>
+
+    <string name="setting_one">One tile shows</string>
+    <string name="setting_one_help">What Mountaineer shows above its climb graph at one tile.</string>
+    <string name="setting_two">Two tiles show</string>
+    <string name="setting_two_help">Both: time to top big, your time vs PR under it.</string>
+    <string name="setting_half">Half screen shows</string>
+    <string name="setting_half_help">The TO TOP bar and the climb graph always show.</string>
+    <string name="setting_symbol">PR symbol</string>
+    <string name="setting_symbol_help">Next to the climb icon wherever your PR shows.</string>
+    <string name="show_eta">Time to top</string>
+    <string name="show_dist">Dist to top</string>
+    <string name="show_gap">Time vs PR</string>
+    <string name="show_eta_short">Time</string>
+    <string name="show_dist_short">Distance</string>
+    <string name="show_both">Both</string>
+    <string name="half_name">Climb name</string>
+    <string name="half_pr">PR</string>
+    <string name="half_gap">Time vs PR</string>
+    <string name="half_eta">Time to top</string>
+    <string name="symbol_medal">PR medal</string>
+    <string name="symbol_badge">PR badge</string>
+    <string name="setting_time">Time to top</string>
+    <string name="setting_bike">Bike weight</string>
+    <string name="bike_one">One for all</string>
+    <string name="bike_profiles">Per ride profile</string>
+    <string name="bike_all">All bikes</string>
+    <string name="kg">kg</string>
+    <string name="bike_one_help">Standard 8.0 kg (grey); type your own. With bottles and bags. Your own weight comes from your Karoo rider profile.</string>
+    <string name="bike_profiles_help">Each profile you pick on the Karoo shows up here. Not filled in: the one-for-all weight (grey).</string>
+    <string name="bike_profiles_none">No ride profiles yet: pick one on the Karoo\'s home screen and it shows up here.</string>
+    <string name="weenie">Oh nice, a weight weenie build!</string>
+    <string name="setting_wind">Wind</string>
+    <string name="setting_wind_help">Head- and tailwind on each part of the climb, from the Open-Meteo forecast. No connection: no wind.</string>
+    <string name="setting_improve">Improve over time</string>
+    <string name="setting_improve_help">Logs each climb (your speed against your power, the gradient and the wind) and learns from it, so the time to top gets better with every climb.</string>
+    <string name="privacy">The data stays on your Karoo and never leaves it.</string>
+    <string name="strava_title">Strava</string>
+    <string name="strava_help">Your PR comes from the Karoo\'s own Strava Live Segments (Karoo Settings › Strava). Climbs come from the route you load.</string>
+</resources>
