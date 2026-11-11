@@ -10,11 +10,11 @@
     <string name="example_half">Half screen</string>
 
     <string name="setting_one">One tile shows</string>
-    <string name="setting_one_help">What Mountaineer shows above its climb graph at one tile.</string>
+    <string name="setting_one_help">Picks the number above the climb graph on one tile.</string>
     <string name="setting_two">Two tiles show</string>
-    <string name="setting_two_help">Both: time to top big, your time vs PR under it.</string>
+    <string name="setting_two_help">Picks the number above the climb graph on two tiles. Both: time to top big, your time vs PR under it.</string>
     <string name="setting_half">Half screen shows</string>
-    <string name="setting_half_help">The TO TOP bar and the climb graph always show.</string>
+    <string name="setting_half_help">Picks the lines above the climb graph on half a screen. The TO TOP bar and the graph always show.</string>
     <string name="setting_symbol">PR symbol</string>
     <string name="setting_symbol_help">Next to the climb icon wherever your PR shows.</string>
     <string name="show_eta">Time to top</string>
@@ -35,14 +35,13 @@
     <string name="bike_profiles">Per ride profile</string>
     <string name="bike_all">All bikes</string>
     <string name="kg">kg</string>
-    <string name="bike_one_help">Standard 8.0 kg (grey); type your own. With bottles and bags. Your own weight comes from your Karoo rider profile.</string>
-    <string name="bike_profiles_help">Each profile you pick on the Karoo shows up here. Not filled in: the one-for-all weight (grey).</string>
+    <string name="bike_help">Your bike with bottles and bags, for the time to top. Your own weight comes from your Karoo rider profile. Per ride profile: each profile you ride shows up here; one left empty uses the one-for-all weight (grey).</string>
     <string name="bike_profiles_none">No ride profiles yet: pick one on the Karoo\'s home screen and it shows up here.</string>
     <string name="weenie">Oh nice, a weight weenie build!</string>
     <string name="setting_wind">Wind</string>
-    <string name="setting_wind_help">Head- and tailwind on each part of the climb, from the Open-Meteo forecast. No connection: no wind.</string>
+    <string name="setting_wind_help">Adds head- and tailwind on each part of the climb, from the Open-Meteo forecast. No connection: no wind.</string>
     <string name="setting_improve">Improve over time</string>
-    <string name="setting_improve_help">Logs each climb (your speed against your power, the gradient and the wind) and learns from it, so the time to top gets better with every climb.</string>
+    <string name="setting_improve_help">Learns from each climb you ride (your speed against your power, the gradient and the wind), so the time to top gets better with every climb.</string>
     <string name="privacy">The data stays on your Karoo and never leaves it.</string>
     <string name="strava_title">Strava</string>
     <string name="strava_help">Your PR comes from the Karoo\'s own Strava Live Segments (Karoo Settings › Strava). Climbs come from the route you load.</string>
