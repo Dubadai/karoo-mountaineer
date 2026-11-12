@@ -1,5 +1,7 @@
 package com.daviddokakis.mountaineer
 
+import com.dubadai.karoo.common.*
+
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.models.ActiveRidePage
 import io.hammerhead.karooext.models.DataType
